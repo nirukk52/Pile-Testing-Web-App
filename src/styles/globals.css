@@ -70,3 +70,20 @@ body {
   background: #94a3b8;
 }
 
+/**
+ * Extraction Progress Animation
+ * Why: Provides visual feedback during OCR extraction which can take 30-60 seconds.
+ * The sliding animation indicates ongoing work without a specific percentage.
+ */
+@keyframes progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(200%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+

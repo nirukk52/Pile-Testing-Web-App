@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Dropzone } from '@/components/upload/dropzone';
 import { TestTypeSelect } from '@/components/upload/test-type-select';
-import { ArrowRight, FileStack, Zap, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { ArrowRight, FileStack, Zap, AlertCircle, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useReportStore } from '@/store/report-store';
 import { extractReadings, checkOCRServerHealth } from '@/lib/ocr-api';
@@ -193,48 +193,86 @@ export default function UploadPage() {
           </section>
 
           {/* Action Bar */}
-          <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="text-sm text-slate-500">
-              {uploadedFiles.length === 0 ? (
-                <span>No files uploaded</span>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-emerald-500" />
-                  <span className="font-medium text-slate-700">
-                    {uploadedFiles.length} file{uploadedFiles.length !== 1 ? 's' : ''} ready
-                    {testType && (
-                      <span className="ml-2 text-slate-500">
-                        • {testType} test
-                      </span>
-                    )}
-                  </span>
+          <div className={cn(
+            'rounded-2xl border bg-white shadow-sm transition-all duration-300',
+            isLoading ? 'border-blue-200 bg-blue-50/30' : 'border-slate-200'
+          )}>
+            {isLoading ? (
+              /* Extraction Progress View */
+              <div className="p-6">
+                <div className="flex items-center gap-4">
+                  <div className="relative">
+                    <div className="h-12 w-12 rounded-full border-4 border-blue-100" />
+                    <div className="absolute inset-0 h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-slate-800">
+                      Extracting readings from {uploadedFiles.length} file{uploadedFiles.length !== 1 ? 's' : ''}...
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Using AI to extract handwritten data. This may take up to a minute.
+                    </p>
+                  </div>
                 </div>
-              )}
-            </div>
+                {/* Progress bar animation */}
+                <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-blue-100">
+                  <div className="h-full w-1/3 animate-[progress_2s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-blue-400 via-blue-500 to-blue-400" />
+                </div>
+              </div>
+            ) : (
+              /* Default View */
+              <div className="flex items-center justify-between p-6">
+                <div className="text-sm text-slate-500">
+                  {uploadedFiles.length === 0 ? (
+                    <span>No files uploaded</span>
+                  ) : testType === null ? (
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4 text-amber-500" />
+                      <span className="font-medium text-amber-700">
+                        {uploadedFiles.length} file{uploadedFiles.length !== 1 ? 's' : ''} ready
+                        <span className="ml-2 text-amber-600">
+                          — Select a test type above
+                        </span>
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-emerald-500" />
+                      <span className="font-medium text-slate-700">
+                        {uploadedFiles.length} file{uploadedFiles.length !== 1 ? 's' : ''} ready
+                        <span className="ml-2 text-slate-500">
+                          • {testType} test
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                </div>
 
-            <button
-              onClick={handleExtract}
-              disabled={!canProceed || serverOnline === false}
-              className={cn(
-                'flex items-center gap-2 rounded-lg px-6 py-3 font-semibold',
-                'transition-all duration-200',
-                canProceed && serverOnline !== false
-                  ? 'bg-blue-600 text-white shadow-sm hover:bg-blue-700 active:scale-[0.98]'
-                  : 'cursor-not-allowed bg-slate-100 text-slate-400'
-              )}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Extracting...
-                </>
-              ) : (
-                <>
+                <button
+                  onClick={handleExtract}
+                  disabled={!canProceed || serverOnline === false}
+                  className={cn(
+                    'flex items-center gap-2 rounded-lg px-6 py-3 font-semibold',
+                    'transition-all duration-200',
+                    canProceed && serverOnline !== false
+                      ? 'bg-blue-600 text-white shadow-sm hover:bg-blue-700 active:scale-[0.98]'
+                      : 'cursor-not-allowed bg-slate-100 text-slate-400'
+                  )}
+                  title={
+                    uploadedFiles.length === 0
+                      ? 'Upload files first'
+                      : testType === null
+                      ? 'Select a test type first'
+                      : serverOnline === false
+                      ? 'OCR server is offline'
+                      : undefined
+                  }
+                >
                   Extract Readings
                   <ArrowRight className="h-4 w-4" />
-                </>
-              )}
-            </button>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

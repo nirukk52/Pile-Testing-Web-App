@@ -1,0 +1,352 @@
+{
+  "project_info": {
+    "testNo": {
+      "value": null,
+      "confidence": 0.0
+    },
+    "project": {
+      "value": "Implementation of Sewerage Management System in Nashik City",
+      "confidence": 0.9
+    },
+    "location": {
+      "value": "Panchak STP 75 MLD",
+      "confidence": 0.9
+    },
+    "contractor": {
+      "value": "NMC",
+      "confidence": 0.9
+    },
+    "clientName": {
+      "value": null,
+      "confidence": 0.0
+    },
+    "pileDiameter": {
+      "value": "600 mm",
+      "confidence": 0.9
+    },
+    "designLoad": {
+      "value": "35 MT",
+      "confidence": 0.9
+    },
+    "testLoad": {
+      "value": "87.5 MT",
+      "confidence": 0.9
+    },
+    "ramArea": {
+      "value": "71.2 cm\u00b2",
+      "confidence": 0.9
+    },
+    "dateOfCasting": {
+      "value": "2023-09-23",
+      "confidence": 0.9
+    },
+    "pileDepth": {
+      "value": "10.31 m",
+      "confidence": 0.9
+    },
+    "lcDialGauge": {
+      "value": "0.01 mm",
+      "confidence": 0.9
+    },
+    "testType": {
+      "value": "Lateral",
+      "confidence": 0.9
+    },
+    "mixedDesign": {
+      "value": "M25",
+      "confidence": 0.9
+    }
+  },
+  "readings": [
+    {
+      "id": "e56cdf55-a565-4628-a033-9019f47908ae",
+      "date": {
+        "value": "2023-10-25",
+        "confidence": 0.9
+      },
+      "time": {
+        "value": "15:00",
+        "confidence": 0.9
+      },
+      "pressure": {
+        "value": 20,
+        "confidence": 0.9
+      },
+      "gauge1": {
+        "value": 0.07,
+        "confidence": 0.9
+      },
+      "gauge2": {
+        "value": 0.07,
+        "confidence": 0.9
+      },
+      "gauge3": {
+        "value": 0.16,
+        "confidence": 0.9
+      },
+      "gauge4": {
+        "value": 0.16,
+        "confidence": 0.9
+      },
+      "remark": {
+        "value": null,
+        "confidence": 0.0
+      },
+      "cycle": "loading"
+    },
+    {
+      "id": "81fa0acb-90c5-4ed7-9bae-473d04f8f930",
+      "date": {
+        "value": "2023-10-25",
+        "confidence": 0.9
+      },
+      "time": {
+        "value": "15:10",
+        "confidence": 0.9
+      },
+      "pressure": {
+        "value": 20,
+        "confidence": 0.9
+      },
+      "gauge1": {
+        "value": 0.21,
+        "confidence": 0.9
+      },
+      "gauge2": {
+        "value": 0.27,
+        "confidence": 0.9
+      },
+      "gauge3": {
+        "value": 0.23,
+        "confidence": 0.9
+      },
+      "gauge4": {
+        "value": 0.23,
+        "confidence": 0.9
+      },
+      "remark": {
+        "value": null,
+        "confidence": 0.0
+      },
+      "cycle": "loading"
+    },
+    {
+      "id": "bf3bcfd4-2b69-4924-a669-4ac254b4b928",
+      "date": {
+        "value": "2023-10-25",
+        "confidence": 0.9
+      },
+      "time": {
+        "value": "15:20",
+        "confidence": 0.9
+      },
+      "pressure": {
+        "value": 20,
+        "confidence": 0.9
+      },
+      "gauge1": {
+        "value": 0.1,
+        "confidence": 0.9
+      },
+      "gauge2": {
+        "value": 0.11,
+        "confidence": 0.9
+      },
+      "gauge3": {
+        "value": null,
+        "confidence": 0.0
+      },
+      "gauge4": {
+        "value": null,
+        "confidence": 0.0
+      },
+      "remark": {
+        "value": null,
+        "confidence": 0.0
+      },
+      "cycle": "loading"
+    },
+    {
+      "id": "dc7b24c2-9907-4984-bd70-7ebb873005c4",
+      "date": {
+        "value": "2023-10-25",
+        "confidence": 0.9
+      },
+      "time": {
+        "value": "15:30",
+        "confidence": 0.9
+      },
+      "pressure": {
+        "value": 40,
+        "confidence": 0.5
+      },
+      "gauge1": {
+        "value": 0.23,
+        "confidence": 0.5
+      },
+      "gauge2": {
+        "value": 0.3,
+        "confidence": 0.5
+      },
+      "gauge3": {
+        "value": 0.25,
+        "confidence": 0.5
+      },
+      "gauge4": {
+        "value": 0.27,
+        "confidence": 0.5
+      },
+      "remark": {
+        "value": null,
+        "confidence": 0.0
+      },
+      "cycle": "loading"
+    },
+    {
+      "id": "11e52514-3005-4be8-8d8c-1a89f3966ef2",
+      "date": {
+        "value": "2023-10-25",
+        "confidence": 0.9
+      },
+      "time": {
+        "value": "15:40",
+        "confidence": 0.9
+      },
+      "pressure": {
+        "value": 60,
+        "confidence": 0.5
+      },
+      "gauge1": {
+        "value": 0.4,
+        "confidence": 0.5
+      },
+      "gauge2": {
+        "value": 0.36,
+        "confidence": 0.5
+      },
+      "gauge3": {
+        "value": 0.29,
+        "confidence": 0.5
+      },
+      "gauge4": {
+        "value": 0.3,
+        "confidence": 0.5
+      },
+      "remark": {
+        "value": null,
+        "confidence": 0.0
+      },
+      "cycle": "loading"
+    },
+    {
+      "id": "5863bd71-79bb-40ae-aef7-fec28786940b",
+      "date": {
+        "value": "2023-10-25",
+        "confidence": 0.9
+      },
+      "time": {
+        "value": "16:20",
+        "confidence": 0.9
+      },
+      "pressure": {
+        "value": 80,
+        "confidence": 0.5
+      },
+      "gauge1": {
+        "value": 0.58,
+        "confidence": 0.5
+      },
+      "gauge2": {
+        "value": 0.51,
+        "confidence": 0.5
+      },
+      "gauge3": {
+        "value": 0.35,
+        "confidence": 0.5
+      },
+      "gauge4": {
+        "value": 0.41,
+        "confidence": 0.5
+      },
+      "remark": {
+        "value": null,
+        "confidence": 0.0
+      },
+      "cycle": "loading"
+    },
+    {
+      "id": "af4b122f-e70f-49d4-a815-001043cf6615",
+      "date": {
+        "value": "2023-10-25",
+        "confidence": 0.9
+      },
+      "time": {
+        "value": "16:50",
+        "confidence": 0.9
+      },
+      "pressure": {
+        "value": 100,
+        "confidence": 0.9
+      },
+      "gauge1": {
+        "value": 0.75,
+        "confidence": 0.9
+      },
+      "gauge2": {
+        "value": 0.88,
+        "confidence": 0.9
+      },
+      "gauge3": {
+        "value": 0.53,
+        "confidence": 0.9
+      },
+      "gauge4": {
+        "value": 0.76,
+        "confidence": 0.9
+      },
+      "remark": {
+        "value": null,
+        "confidence": 0.0
+      },
+      "cycle": "loading"
+    },
+    {
+      "id": "55e8d7bb-1403-4ce0-85d1-5d1db5270646",
+      "date": {
+        "value": "2023-10-25",
+        "confidence": 0.9
+      },
+      "time": {
+        "value": "17:30",
+        "confidence": 0.9
+      },
+      "pressure": {
+        "value": 125,
+        "confidence": 0.5
+      },
+      "gauge1": {
+        "value": 1.55,
+        "confidence": 0.5
+      },
+      "gauge2": {
+        "value": 1.43,
+        "confidence": 0.5
+      },
+      "gauge3": {
+        "value": 0.81,
+        "confidence": 0.5
+      },
+      "gauge4": {
+        "value": 1.02,
+        "confidence": 0.5
+      },
+      "remark": {
+        "value": null,
+        "confidence": 0.0
+      },
+      "cycle": "loading"
+    }
+  ],
+  "page_count": 1,
+  "total_readings": 8
+}
