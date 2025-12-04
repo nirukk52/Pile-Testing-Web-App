@@ -1,0 +1,127 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "PileLoadTestExtraction",
+    "description": "Schema for extracting pile load test data (Vertical, Lateral, Pullout) from hand-written notes and typed reports.",
+    "type": "object",
+    "properties": {
+      "metadata": {
+        "type": "object",
+        "description": "Meta-information about the source document and extraction quality.",
+        "properties": {
+          "source_filename": { "type": "string" },
+          "extraction_date": { "type": "string", "format": "date-time" },
+          "document_type": { 
+            "type": "string", 
+            "enum": ["Handwritten Field Note", "Typed Final Report", "Mixed"] 
+          },
+          "overall_confidence_score": { 
+            "type": "number", 
+            "description": "0.0 to 1.0 confidence in legibility." 
+          }
+        }
+      },
+      "project_info": {
+        "type": "object",
+        "properties": {
+          "project_name": { "type": "string" },
+          "location": { "type": "string", "description": "e.g., AGARTAKLI, COOVAM, Panchak STP" },
+          "client": { "type": "string", "description": "e.g., NMC, CMRL" },
+          "contractor": { "type": "string" },
+          "consultant": { "type": "string" },
+          "testing_agency": { "type": "string", "description": "e.g., QCC, ZedGeo" }
+        }
+      },
+      "test_configuration": {
+        "type": "object",
+        "description": "Technical specifications of the pile and test setup.",
+        "properties": {
+          "pile_id": { "type": "string", "description": "e.g., TP-05, TP-01" },
+          "test_type": { 
+            "type": "string", 
+            "enum": ["Initial Vertical", "Routine Vertical", "Lateral", "Pullout/Uplift"] 
+          },
+          "pile_diameter_mm": { "type": "number" },
+          "pile_depth_m": { "type": "number" },
+          "grade_of_concrete": { "type": "string", "description": "e.g., M25, M35" },
+          "date_of_casting": { "type": "string", "format": "date" },
+          "date_of_testing": { "type": "string", "format": "date" },
+          "design_load_mt": { "type": "number" },
+          "test_load_mt": { "type": "number" },
+          "jack_ram_area_cm2": { 
+            "type": "number", 
+            "description": "Critical for validating Pressure vs Load. Common values: 706, 2551, 71.2" 
+          }
+        }
+      },
+      "gauge_calibration_info": {
+        "type": "array",
+        "description": "Details from attached calibration certificates.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "equipment_type": { "type": "string", "enum": ["Pressure Gauge", "Dial Gauge", "Jack"] },
+            "serial_number": { "type": "string" },
+            "calibration_date": { "type": "string", "format": "date" },
+            "range": { "type": "string" },
+            "least_count": { "type": "string" }
+          }
+        }
+      },
+      "readings": {
+        "type": "array",
+        "description": "The core tabular data extracted from the logs.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "row_id": { "type": "integer", "description": "Sequential line number from the table." },
+            "phase": { 
+              "type": "string", 
+              "enum": ["Loading", "Holding", "Unloading", "24hr Cycle"],
+              "description": "Inferred from load progression."
+            },
+            "date": { "type": "string", "format": "date" },
+            "time": { 
+              "type": "string", 
+              "description": "Time of reading (e.g., 12:30). Convert to 24h format if possible." 
+            },
+            "time_elapsed_mins": { "type": "integer", "description": "Duration since load application." },
+            "pressure_gauge_reading_kg_cm2": { "type": "number" },
+            "load_applied_mt": { "type": "number" },
+            "test_pile_deflection": {
+              "type": "object",
+              "description": "Readings for the main pile being tested.",
+              "properties": {
+                "dial_1_mm": { "type": "number" },
+                "dial_2_mm": { "type": "number" },
+                "dial_3_mm": { "type": "number" },
+                "dial_4_mm": { "type": "number" },
+                "average_mm": { "type": "number" }
+              }
+            },
+            "reaction_pile_deflection": {
+              "type": "object",
+              "description": "Only populated for Lateral Load Tests where reaction pile movement is recorded.",
+              "properties": {
+                "dial_1_mm": { "type": "number" },
+                "dial_2_mm": { "type": "number" },
+                "average_mm": { "type": "number" }
+              }
+            },
+            "remarks": { "type": "string", "description": "Any handwritten notes on the side (e.g., 'cracks observed', 'jack reset')." }
+          }
+        }
+      },
+      "results_summary": {
+        "type": "object",
+        "description": "Final calculated results usually found at the end of the report.",
+        "properties": {
+          "max_load_applied_mt": { "type": "number" },
+          "max_settlement_mm": { "type": "number" },
+          "total_rebound_mm": { "type": "number" },
+          "net_settlement_mm": { "type": "number" },
+          "safe_load_capacity_mt": { "type": "number" },
+          "conclusion_text": { "type": "string", "description": "The final verdict (e.g., 'Pile is safe', 'Limit reached')." }
+        }
+      }
+    }
+  }

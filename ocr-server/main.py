@@ -96,6 +96,127 @@ async def health():
         }
 
 
+@app.post("/debug-ocr")
+async def debug_ocr(files: List[UploadFile] = File(...)):
+    """
+    Debug endpoint to see raw PaddleOCR output.
+    Why: Helps diagnose OCR parsing issues by showing the raw model output.
+    """
+    import numpy as np
+    
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+    
+    ocr = get_ocr()
+    file = files[0]
+    
+    try:
+        contents = await file.read()
+        image = Image.open(io.BytesIO(contents))
+        
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+        
+        img_array = np.array(image)
+        
+        # Get raw OCR result
+        raw_result = ocr.ocr.predict(img_array)
+        
+        # Analyze the result structure
+        debug_info = {
+            "image_size": image.size,
+            "image_mode": image.mode,
+            "result_type": str(type(raw_result)),
+            "result_length": len(raw_result) if raw_result else 0,
+            "result_structure": [],
+            "all_detected_text": []
+        }
+        
+        if raw_result:
+            for i, res in enumerate(raw_result):
+                res_info = {
+                    "index": i,
+                    "type": str(type(res)),
+                    "is_dict": isinstance(res, dict),
+                }
+                
+                # PaddleOCR 3.x returns OCRResult with rec_texts, rec_scores, rec_polys
+                rec_texts = []
+                rec_scores = []
+                rec_polys = []
+                
+                # Try dict access
+                if isinstance(res, dict):
+                    res_info["dict_keys"] = list(res.keys())
+                    rec_texts = res.get("rec_texts", [])
+                    rec_scores = res.get("rec_scores", [])
+                    rec_polys = res.get("rec_polys", res.get("rec_boxes", []))
+                
+                # Try attribute access (for Result objects)
+                if hasattr(res, 'rec_texts'):
+                    rec_texts = res.rec_texts or []
+                if hasattr(res, 'rec_scores'):
+                    rec_scores = res.rec_scores or []
+                if hasattr(res, 'rec_polys'):
+                    rec_polys = res.rec_polys or []
+                elif hasattr(res, 'rec_boxes'):
+                    rec_polys = res.rec_boxes or []
+                
+                res_info["rec_texts_count"] = len(rec_texts)
+                res_info["rec_scores_count"] = len(rec_scores)
+                res_info["rec_polys_count"] = len(rec_polys)
+                
+                # Extract text with positions
+                for j in range(len(rec_texts)):
+                    text = rec_texts[j] if j < len(rec_texts) else ""
+                    score = rec_scores[j] if j < len(rec_scores) else 0
+                    poly = rec_polys[j] if j < len(rec_polys) else []
+                    
+                    # Calculate center position
+                    if poly is not None and len(poly) >= 4:
+                        try:
+                            # Handle different poly formats
+                            if hasattr(poly, 'tolist'):
+                                poly = poly.tolist()
+                            if isinstance(poly[0], (list, tuple)):
+                                center_x = sum(p[0] for p in poly) / len(poly)
+                                center_y = sum(p[1] for p in poly) / len(poly)
+                            else:
+                                # Flat format [x1,y1,x2,y2,x3,y3,x4,y4]
+                                center_x = (poly[0] + poly[2] + poly[4] + poly[6]) / 4
+                                center_y = (poly[1] + poly[3] + poly[5] + poly[7]) / 4
+                        except:
+                            center_x, center_y = 0, 0
+                    else:
+                        center_x, center_y = 0, 0
+                    
+                    if text:
+                        debug_info["all_detected_text"].append({
+                            "text": str(text),
+                            "confidence": round(float(score), 3),
+                            "x_position": round(center_x, 1),
+                            "y_position": round(center_y, 1)
+                        })
+                
+                # Check if res has __dict__ 
+                if hasattr(res, '__dict__'):
+                    res_info["attrs"] = list(res.__dict__.keys())[:10]
+                
+                debug_info["result_structure"].append(res_info)
+        
+        # Sort detected text by Y position, then X
+        debug_info["all_detected_text"].sort(key=lambda x: (x.get("y_position", 0), x.get("x_position", 0)))
+        
+        return debug_info
+        
+    except Exception as e:
+        import traceback
+        return {
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+
 @app.post("/extract", response_model=ExtractResponse)
 async def extract_readings(files: List[UploadFile] = File(...)):
     """

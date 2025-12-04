@@ -93,41 +93,78 @@ class PileSheetOCR:
             return {"project_info": {}, "readings": [], "raw_text": []}
         
         # Extract all text boxes with positions and confidence
-        # PaddleOCR 3.x returns Result objects
+        # PaddleOCR 3.x returns OCRResult objects with rec_texts, rec_scores, rec_polys
         text_boxes = []
         
         for res in result:
-            # Access OCR results from the Result object
-            ocr_results = res.get("ocr_result", []) if isinstance(res, dict) else []
+            # Get recognized texts, scores, and polygons
+            rec_texts = []
+            rec_scores = []
+            rec_polys = []
             
-            # Also try accessing via attribute for Result objects
-            if not ocr_results and hasattr(res, 'ocr_result'):
-                ocr_results = res.ocr_result or []
+            # Try dict access first
+            if isinstance(res, dict):
+                rec_texts = res.get("rec_texts", [])
+                rec_scores = res.get("rec_scores", [])
+                rec_polys = res.get("rec_polys", res.get("rec_boxes", []))
             
-            # Handle the case where res itself might be the result dict
-            if not ocr_results and isinstance(res, dict) and "bbox" in res:
-                ocr_results = [res]
+            # Try attribute access for OCRResult objects
+            if hasattr(res, 'rec_texts') and res.rec_texts:
+                rec_texts = res.rec_texts
+            if hasattr(res, 'rec_scores') and res.rec_scores:
+                rec_scores = res.rec_scores
+            if hasattr(res, 'rec_polys') and res.rec_polys:
+                rec_polys = res.rec_polys
+            elif hasattr(res, 'rec_boxes') and res.rec_boxes:
+                rec_polys = res.rec_boxes
             
-            for item in ocr_results:
-                if isinstance(item, dict):
-                    bbox = item.get("bbox", [])
-                    text = item.get("text", "")
-                    score = item.get("score", 0.0)
-                    
-                    # Calculate center position from bbox
-                    if bbox and len(bbox) >= 4:
-                        center_x = sum(p[0] for p in bbox) / len(bbox)
-                        center_y = sum(p[1] for p in bbox) / len(bbox)
-                    else:
-                        center_x, center_y = 0, 0
-                    
-                    text_boxes.append({
-                        "text": str(text),
-                        "confidence": float(score),
-                        "x": center_x,
-                        "y": center_y,
-                        "bbox": bbox
-                    })
+            # Convert to list if numpy array
+            if hasattr(rec_texts, 'tolist'):
+                rec_texts = rec_texts.tolist()
+            if hasattr(rec_scores, 'tolist'):
+                rec_scores = rec_scores.tolist()
+            
+            # Process each detected text
+            for j in range(len(rec_texts)):
+                text = rec_texts[j] if j < len(rec_texts) else ""
+                score = rec_scores[j] if j < len(rec_scores) else 0
+                poly = rec_polys[j] if j < len(rec_polys) else []
+                
+                # Skip empty text
+                if not text or not str(text).strip():
+                    continue
+                
+                # Calculate center position from polygon
+                center_x, center_y = 0, 0
+                bbox = poly
+                
+                if poly is not None:
+                    try:
+                        # Convert numpy array to list if needed
+                        if hasattr(poly, 'tolist'):
+                            poly = poly.tolist()
+                        
+                        if len(poly) >= 4:
+                            if isinstance(poly[0], (list, tuple)):
+                                # Format: [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+                                center_x = sum(p[0] for p in poly) / len(poly)
+                                center_y = sum(p[1] for p in poly) / len(poly)
+                                bbox = poly
+                            else:
+                                # Flat format: [x1,y1,x2,y2,x3,y3,x4,y4]
+                                center_x = (poly[0] + poly[2] + poly[4] + poly[6]) / 4
+                                center_y = (poly[1] + poly[3] + poly[5] + poly[7]) / 4
+                                bbox = [[poly[i], poly[i+1]] for i in range(0, 8, 2)]
+                    except Exception:
+                        pass
+                
+                text_boxes.append({
+                    "text": str(text),
+                    "confidence": float(score) if score else 0.0,
+                    "x": center_x,
+                    "y": center_y,
+                    "bbox": bbox
+                })
         
         # Sort by Y position (top to bottom), then X (left to right)
         text_boxes.sort(key=lambda b: (b["y"], b["x"]))
@@ -207,14 +244,23 @@ class PileSheetOCR:
         # Group boxes by row (similar Y coordinate, within threshold)
         rows = self._group_into_rows(table_boxes, y_threshold=25)
         
-        # Process each row
+        # Process each row - keep track of Y position for ordering
         for row in rows:
             reading = self._parse_reading_row(row)
             if reading:
+                # Store the row's Y position for document-order sorting
+                avg_y = sum(box["y"] for box in row) / len(row)
+                reading["_row_y"] = avg_y
                 readings.append(reading)
         
-        # Sort readings by time
-        readings = self._sort_readings_by_time(readings)
+        # Sort by document position (Y coordinate) instead of time
+        # Why: OCR may misread digits (7→2), so time-based sorting is unreliable.
+        # Document order preserves the chronological sequence from the field sheet.
+        readings.sort(key=lambda r: r.get("_row_y", 0))
+        
+        # Remove the internal Y position field
+        for reading in readings:
+            reading.pop("_row_y", None)
         
         return readings
     
@@ -245,15 +291,12 @@ class PileSheetOCR:
     
     def _parse_reading_row(self, row: list) -> Optional[dict]:
         """
-        Parse a single row of readings.
-        Why: Extracts time, pressure, and gauge values from a row of text boxes.
+        Parse a single row of readings using X position for column mapping.
+        Why: Extracts time, pressure, and gauge values based on their horizontal position
+        in the table, which is more reliable than content-based detection.
         """
-        if len(row) < 5:
+        if len(row) < 4:
             return None
-        
-        # Try to identify columns based on content patterns
-        time_pattern = r"^\d{1,2}[:\.\s]\d{2}$"
-        number_pattern = r"^\d+\.?\d*$"
         
         reading = {
             "date": {"value": None, "confidence": 0.0},
@@ -266,58 +309,79 @@ class PileSheetOCR:
             "remark": {"value": None, "confidence": 1.0},
         }
         
-        numeric_values = []
+        # Column X position ranges (calibrated from actual field sheets)
+        # For ~2000px width images with standard ZedGeo layout:
+        column_ranges = {
+            "date": (0, 130),          # DATE column (x < 130)
+            "time": (130, 220),        # TIME column (x ~ 162)
+            "pressure": (220, 350),    # PRESSURE gauge reading kg/cm² (x ~ 266)
+            "load": (350, 500),        # LOAD IN MT (x ~ 405) - skip this
+            "gauge1": (500, 640),      # Reading 1 - Test Pile (x ~ 535)
+            "gauge2": (640, 780),      # Reading 2 - Test Pile (x ~ 681)
+            "gauge3": (780, 920),      # Reading 3 - Reaction Pile (x ~ 811)
+            "gauge4": (920, 1060),     # Reading 4 - Reaction Pile (x ~ 943)
+        }
+        
+        # Time pattern - handles various formats from OCR
+        time_pattern = r"^\d{1,2}[:\.\-!\·]\d{2}$"
         
         for box in row:
             text = box["text"].strip()
             confidence = box["confidence"]
+            x = box["x"]
             
-            # Check for time format (e.g., "9:21", "10.05", "9.21")
-            if re.match(time_pattern, text.replace(".", ":")):
-                time_str = text.replace(".", ":")
-                reading["time"] = {"value": time_str, "confidence": confidence}
-            # Check for date format
-            elif re.match(r"\d{1,2}/\d{1,2}/?\d{0,4}", text):
-                reading["date"] = {"value": text, "confidence": confidence}
-            # Check for numeric values (pressure or gauge readings)
-            elif re.match(number_pattern, text.replace(",", ".")):
+            # Clean up common OCR errors in text
+            clean_text = text.replace("·", ".").replace("!", ":").replace("-", ".").replace("r", ".")
+            clean_text = re.sub(r"[A-Za-z]", "", clean_text)  # Remove stray letters
+            clean_text = clean_text.strip()
+            
+            # Determine column based on X position
+            column = None
+            for col_name, (x_min, x_max) in column_ranges.items():
+                if x_min <= x < x_max:
+                    column = col_name
+                    break
+            
+            if column == "date":
+                # Check for date format (DD/MM or DDMMYY)
+                if re.match(r"^\d{2,6}[/]?\d{0,4}$", text):
+                    reading["date"] = {"value": text, "confidence": confidence}
+            
+            elif column == "time":
+                # Parse time - handle various OCR formats
+                if re.match(time_pattern, text):
+                    # Normalize time format
+                    time_str = re.sub(r"[:\.\-!\·]", ":", text)
+                    reading["time"] = {"value": time_str, "confidence": confidence}
+            
+            elif column == "pressure":
+                # Pressure gauge reading in kg/cm²
                 try:
-                    value = float(text.replace(",", "."))
-                    numeric_values.append({"value": value, "confidence": confidence})
-                except ValueError:
+                    value = float(clean_text)
+                    if 0 <= value <= 300:  # Reasonable pressure range
+                        reading["pressure"] = {"value": value, "confidence": confidence}
+                except (ValueError, TypeError):
                     pass
-            # Check for remarks (non-numeric text that's not a header)
-            elif len(text) > 2 and not any(kw in text.upper() for kw in ["DATE", "TIME", "PRESSURE", "READING", "GAUGE"]):
-                # Could be a remark
-                if reading["remark"]["value"] is None:
-                    reading["remark"] = {"value": text, "confidence": confidence}
-        
-        # Assign numeric values to columns
-        # Expected order: pressure, gauge1, gauge2, gauge3, gauge4
-        # But first value might be load (skip if > 100, as pressures are typically < 100)
-        if numeric_values:
-            gauge_values = []
-            for nv in numeric_values:
-                if nv["value"] >= 100 and reading["pressure"]["value"] is None:
-                    # This is likely pressure (in kg/cm2) or load
-                    reading["pressure"] = nv
-                elif nv["value"] < 20:
-                    # Likely a gauge reading (mm)
-                    gauge_values.append(nv)
-                else:
-                    # Could be pressure if we haven't found it yet
-                    if reading["pressure"]["value"] is None:
-                        reading["pressure"] = nv
-                    else:
-                        gauge_values.append(nv)
             
-            # Assign gauge values
-            gauge_fields = ["gauge1", "gauge2", "gauge3", "gauge4"]
-            for i, gv in enumerate(gauge_values[:4]):
-                reading[gauge_fields[i]] = gv
+            elif column == "load":
+                # Load in MT - skip, we use pressure for calculations
+                pass
+            
+            elif column in ["gauge1", "gauge2", "gauge3", "gauge4"]:
+                # Dial gauge readings (typically 0-20mm range)
+                try:
+                    value = float(clean_text)
+                    if 0 <= value <= 50:  # Reasonable gauge reading range
+                        reading[column] = {"value": value, "confidence": confidence}
+                except (ValueError, TypeError):
+                    pass
         
-        # Only return if we have at least time and some gauge readings
-        if reading["time"]["value"] and any(reading[f"gauge{i}"]["value"] for i in range(1, 5)):
+        # Validate: need at least time and some data
+        has_time = reading["time"]["value"] is not None
+        has_gauges = any(reading[f"gauge{i}"]["value"] is not None for i in range(1, 5))
+        has_pressure = reading["pressure"]["value"] is not None
+        
+        if has_time and (has_gauges or has_pressure):
             return reading
         
         return None
