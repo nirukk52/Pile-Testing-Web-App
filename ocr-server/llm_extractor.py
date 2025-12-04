@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 MODEL_CHAIN = [
     "claude-sonnet-4-20250514",     # Primary: Best for structured extraction
     "gpt-4o",                       # Fallback 1: Strong vision capabilities  
-    "gemini/gemini-1.5-pro",        # Fallback 2: Good for tables
+    "gemini/gemini-2.5-pro",        # Fallback 2: Pro model for accuracy (not Flash)
 ]
 
 # Extraction prompt template
@@ -120,7 +120,7 @@ Return ONLY a valid JSON object with this exact structure. No markdown, no expla
 IMPORTANT: 
 - All images provided are pages from the SAME test. Combine readings from all pages into a single chronological list.
 - The row_id should be sequential across all pages (1, 2, 3, ... n).
-- Extract the project_info from whichever page has the clearest header information.
+- Extract project_info from ALL pages and cross-verify. The first page typically has the most complete header data; use subsequent pages to confirm/fill gaps.
 """
 
 
@@ -142,25 +142,114 @@ def encode_image_to_base64(image: Image.Image, format: str = "JPEG") -> str:
     return base64.b64encode(buffer.read()).decode("utf-8")
 
 
-def build_message_content(images: list[Image.Image], prompt: str) -> list[dict]:
+def build_message_content(images: list[Image.Image], prompt: str, model: str = "") -> list[dict]:
     """
     Build the message content array with text prompt and all images.
     Why: Multi-page documents need all images in a single call for context carryover.
+    
+    Note: The 'detail' parameter is OpenAI-specific. Gemini doesn't support it and 
+    LiteLLM incorrectly translates it to 'mediaResolution' which causes errors.
     """
     content = [{"type": "text", "text": prompt}]
     
+    # Only add detail parameter for OpenAI models (gpt-*)
+    # Gemini doesn't support this and LiteLLM's translation causes errors
+    is_openai = model.startswith("gpt-")
+    
     for i, img in enumerate(images):
         base64_img = encode_image_to_base64(img)
-        content.append({
+        
+        image_content = {
             "type": "image_url",
             "image_url": {
                 "url": f"data:image/jpeg;base64,{base64_img}",
-                "detail": "high"  # Request high-detail processing for handwriting
             }
-        })
+        }
+        
+        # Add detail parameter only for OpenAI models
+        if is_openai:
+            image_content["image_url"]["detail"] = "high"
+        
+        content.append(image_content)
         logger.info(f"Encoded image {i+1}/{len(images)} ({img.size[0]}x{img.size[1]})")
     
     return content
+
+
+def repair_truncated_json(text: str) -> Optional[str]:
+    """
+    Attempt to repair truncated JSON by closing unclosed brackets/braces.
+    Why: LLMs sometimes return truncated responses that are 99% valid JSON.
+    """
+    # Strip any markdown code fences
+    text = text.strip()
+    if text.startswith("```json"):
+        text = text[7:]
+    elif text.startswith("```"):
+        text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    text = text.strip()
+    
+    # Find the first '{' to handle any preamble text
+    first_brace = text.find('{')
+    if first_brace == -1:
+        return None
+    text = text[first_brace:]
+    
+    # Count unclosed brackets and braces
+    open_braces = 0
+    open_brackets = 0
+    in_string = False
+    escape_next = False
+    
+    for char in text:
+        if escape_next:
+            escape_next = False
+            continue
+        if char == '\\':
+            escape_next = True
+            continue
+        if char == '"' and not escape_next:
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if char == '{':
+            open_braces += 1
+        elif char == '}':
+            open_braces -= 1
+        elif char == '[':
+            open_brackets += 1
+        elif char == ']':
+            open_brackets -= 1
+    
+    # If already balanced, return as-is
+    if open_braces == 0 and open_brackets == 0:
+        return text
+    
+    # Try to close unclosed structures
+    logger.info(f"Attempting JSON repair: {open_braces} unclosed braces, {open_brackets} unclosed brackets")
+    
+    # Remove any trailing incomplete values (e.g., partial strings)
+    # Find the last complete value by looking for last comma or colon followed by valid content
+    repaired = text.rstrip()
+    
+    # If ends with an incomplete string, try to close it
+    if in_string:
+        repaired += '"'
+    
+    # Close any trailing incomplete key-value
+    if repaired.rstrip().endswith(':'):
+        repaired += 'null'
+    elif repaired.rstrip().endswith(','):
+        repaired = repaired.rstrip()[:-1]  # Remove trailing comma
+    
+    # Add closing brackets and braces
+    repaired += ']' * max(0, open_brackets)
+    repaired += '}' * max(0, open_braces)
+    
+    return repaired
 
 
 def extract_with_single_model(images: list[Image.Image], model: str) -> Optional[dict]:
@@ -173,7 +262,13 @@ def extract_with_single_model(images: list[Image.Image], model: str) -> Optional
     logger.info(f"Attempting extraction with model: {model}")
     
     try:
-        content = build_message_content(images, EXTRACTION_PROMPT)
+        content = build_message_content(images, EXTRACTION_PROMPT, model)
+        
+        # Model-specific settings
+        # Gemini needs explicit max_tokens to avoid truncation
+        # GPT-4o needs longer timeout for large images
+        timeout = 120.0 if model.startswith("gpt-") else 90.0
+        max_tokens = 16000  # Ensure enough room for full JSON response
         
         response = completion(
             model=model,
@@ -182,7 +277,8 @@ def extract_with_single_model(images: list[Image.Image], model: str) -> Optional
                 "content": content
             }],
             response_format={"type": "json_object"},
-            timeout=60.0,  # 60 second timeout
+            timeout=timeout,
+            max_tokens=max_tokens,
             num_retries=2,  # Retry on transient errors
         )
         
@@ -196,7 +292,18 @@ def extract_with_single_model(images: list[Image.Image], model: str) -> Optional
             logger.info(f"Successfully parsed JSON from {model}")
             return data
         except json.JSONDecodeError as e:
-            logger.error(f"JSON parse error from {model}: {e}")
+            logger.warning(f"JSON parse error from {model}: {e}")
+            
+            # Attempt to repair truncated JSON
+            repaired = repair_truncated_json(response_text)
+            if repaired:
+                try:
+                    data = json.loads(repaired)
+                    logger.info(f"Successfully parsed REPAIRED JSON from {model}")
+                    return data
+                except json.JSONDecodeError as e2:
+                    logger.error(f"JSON repair failed for {model}: {e2}")
+            
             return None
             
     except Exception as e:

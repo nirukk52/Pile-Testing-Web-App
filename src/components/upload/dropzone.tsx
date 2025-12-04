@@ -240,3 +240,4 @@ export function Dropzone({ files, onFilesChange, maxFiles = 10 }: DropzoneProps)
   );
 }
 
+
