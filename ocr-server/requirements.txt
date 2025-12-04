@@ -1,0 +1,13 @@
+# OCR Server Dependencies
+# Why: These packages power the handwritten field sheet extraction
+
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+paddleocr>=2.7.0
+paddlepaddle>=2.6.2
+Pillow>=10.0.0
+numpy>=1.24.0
+pdf2image>=1.16.0
+pydantic>=2.0.0
+
