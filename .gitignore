@@ -92,3 +92,4 @@ Thumbs.db
 !swagger-ui-extract-endpoint.png
 !project_info_and_context/lateral-test-data/*.png
 *.png
+ocr-server/.env

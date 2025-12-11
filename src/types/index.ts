@@ -203,3 +203,19 @@ export const EMPTY_PROJECT_INFO: ProjectInfo = {
   testType: { value: null, confidence: 0 },
   mixedDesign: { value: null, confidence: 0 },
 };
+
+// ============================================
+// RE-EXPORT CALCULATION TYPES
+// ============================================
+
+/**
+ * Re-export calculation types for convenient imports.
+ * Why: Allows components to import all types from '@/types'
+ * without needing to know about the calculations library structure.
+ */
+export type {
+  CalculatedReading,
+  ReportSummary,
+  ReportData,
+  CalculationInput,
+} from '@/lib/calculations/types';
