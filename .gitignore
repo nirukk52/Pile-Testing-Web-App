@@ -78,7 +78,6 @@ ocr-server/output.json
 ocr-server/test_output.json
 
 # Playwright
-.playwright-mcp/*.png
 playwright-report/
 test-results/
 
@@ -87,7 +86,9 @@ test-results/
 Thumbs.db
 
 # Screenshots (keep only documentation images)
-*.png
+# Note: Negation patterns must come BEFORE the general wildcard to be effective
 !upload-page*.png
 !ocr-ready.png
 !swagger-ui-extract-endpoint.png
+!project_info_and_context/lateral-test-data/*.png
+*.png
