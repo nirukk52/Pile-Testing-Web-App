@@ -3,7 +3,7 @@
 import { useState, Fragment } from 'react';
 import { Plus, Trash2, Pencil } from 'lucide-react';
 import { AddReadingPage, type NewReadingData } from './add-reading-page';
-import type { LoadEntry, Reading, ProjectInfo, TestPhase } from '@/types';
+import type { LoadEntry, LegacyReading, LegacyProjectInfo, LegacyTestPhase } from '@/types';
 import { calculateLoad, calculateAverageSettlement } from '@/types';
 
 /**
@@ -14,14 +14,14 @@ interface DataEntryProps {
   loadEntries: LoadEntry[];
   onAddEntry: (entry: LoadEntry, insertAtIndex?: number) => void;
   onDeleteEntry: (entryId: string) => void;
-  projectInfo: ProjectInfo;
+  projectInfo: LegacyProjectInfo;
 }
 
 /**
  * Phase configuration for visual styling.
  * Why: Consistent colors for loading/holding/unloading phases.
  */
-const phases: Array<{ key: TestPhase; label: string; color: string }> = [
+const phases: Array<{ key: LegacyTestPhase; label: string; color: string }> = [
   { key: 'loading', label: 'LOADING', color: 'bg-blue-600' },
   { key: 'holding', label: 'HOLDING', color: 'bg-amber-600' },
   { key: 'unloading', label: 'UNLOADING', color: 'bg-green-600' },
@@ -44,7 +44,7 @@ export function DataEntry({
     const timestamp = new Date(`${data.date}T${data.time}`).toISOString();
     const load = calculateLoad(data.pressure, projectInfo.ramArea);
 
-    const newReading: Reading = {
+    const newReading: LegacyReading = {
       id: Date.now().toString(),
       pressureGauge: data.pressure,
       load,
@@ -52,6 +52,10 @@ export function DataEntry({
       dialGauge2: data.dialGauge2,
       dialGauge3: data.dialGauge3,
       dialGauge4: data.dialGauge4,
+      dg1Enabled: data.dg1Enabled,
+      dg2Enabled: data.dg2Enabled,
+      dg3Enabled: data.dg3Enabled,
+      dg4Enabled: data.dg4Enabled,
       timestamp,
       signature: data.signature,
       remark: data.remark,

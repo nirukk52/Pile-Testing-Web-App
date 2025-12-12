@@ -1,0 +1,256 @@
+The detailed developer guidelines based on the provided specification and reference reports are included in the downloadable file below.
+
+### **File Summary**
+
+This document serves as the technical implementation guide for the **IVPLT Report Automation** feature. It bridges the gap between the functional requirements in your `spec.md` and the engineering logic found in the IS 2911 standards and sample reports.
+
+**Key sections included:**
+
+1.  **Compliance Logic (IS 2911 Part 4):** Precise formulas for Safe Load, Load-from-Pressure, and Settlement averaging (handling faulty gauges).
+2.  **Database Schema:** A recommended Prisma/Supabase schema tailored to the specific entities (Projects, Tests, Readings, Certificates).
+3.  **PDF Generation Strategy:** Detailed breakdown of the report structure (Title Page through Certificates) to match the visual style of `Report IVPLT TP-04`.
+4.  **AI Integration:** Prompt engineering structure for generating the "Conclusion" section.
+5.  **Frontend/UI Rules:** Specific constraints for the Data Entry Grid and Chart rendering (Loading vs. Unloading curves).
+
+dict\_to\_model(
+{
+"type": "file\_response",
+"content": """\# Developer Guidelines: IVPLT Report Automation
+
+**Reference Spec:** `001-ivplt-report-automation`
+**Compliance Standard:** IS 2911 (Part 4) - 2013
+**Target Output:** Professional PDF Report (Matching sample `Report IVPLT TP-04`)
+
+-----
+
+## 1\. Domain Logic & Calculations (Core Engine)
+
+The backend and frontend must share a unified calculation engine to ensure the "Preview" matches the "Final PDF".
+
+### 1.1 Load Conversion
+
+**Context:** Field data is entered as Pressure ($kg/cm^2$). The report requires Load (Metric Tonnes).
+
+  * **Formula:** $$Load (MT) = \\frac{Pressure (kg/cm^2) \\times Ram Area (cm^2)}{1000}$$
+  * **Constraint:** Ram Area must be captured in `Project Setup`.
+  * **Validation:** If Calculated Load \> (2.5 $\\times$ Design Load) + Tolerance (e.g., 5%), trigger a "Overload" warning.
+
+### 1.2 Settlement Averaging (Faulty Gauge Logic)
+
+**Context:** User Story 1 requires handling faulty gauges.
+
+  * **Inputs:** 4 Dial Gauges ($DG_1, DG_2, DG_3, DG_4$) and 4 Boolean Flags (`isEnabled_1`, etc.).
+  * **Logic:**
+    $$S_{avg} = \\frac{\\sum (DG_i \\mid isEnabled_i == true)}{Count(isEnabled == true)}$$
+  * **Edge Case:** If `Count == 0`, throw validation error (prevent submission).
+
+### 1.3 Phase Detection
+
+The system must categorize readings into three phases for the Graph and Tables:
+
+1.  **Loading:** Pressure/Load increases.
+2.  **Hold (24hr):** Pressure is constant (max load), Time increases.
+3.  **Unloading:** Pressure/Load decreases.
+
+<!-- end list -->
+
+  * **Implementation:** Store a `phase` ENUM in the database (`LOADING`, `HOLD`, `UNLOADING`) for every reading row.
+
+### 1.4 Safe Load Calculation (IS 2911 Part 4 - IVPLT)
+
+The system must compute the Safe Load automatically based on two criteria and select the **lower** value.
+
+1.  **Criterion A (Settlement Limit):**
+
+      * Find Load ($L_{12}$) at 12mm total settlement using Linear Interpolation between the two nearest data points.
+      * $$SafeLoad_A = \\frac{2}{3} \\times L_{12}$$
+      * *Note:* If max settlement \< 12mm, this criterion does not govern (Safe Load is bounded by max test load).
+
+2.  **Criterion B (Ultimate Capacity):**
+
+      * Find Load ($L_{ult}$) at settlement = 10% of Pile Diameter (e.g., 60mm for 600mm pile).
+      * $$SafeLoad_B = 0.5 \\times L_{ult}$$
+
+3.  **Final Decision:**
+
+      * $$SafeLoad_{Final} = Min(SafeLoad_A, SafeLoad_B)$$
+      * **Pass/Fail:** IF $SafeLoad_{Final} \\ge DesignLoad$, THEN `PASS`.
+
+-----
+
+## 2\. Database Schema (Supabase/Prisma)
+
+Based on the entities defined in `spec.md`, use this schema structure.
+
+```prisma
+model Project {
+  id            String   @id @default(uuid())
+  name          String
+  client        String
+  contractor    String
+  pmc           String   // Project Management Consultant
+  location      String
+  tests         Test[]
+}
+
+model Test {
+  id              String   @id @default(uuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id])
+  type            TestType @default(IVPLT)
+  
+  // Pile Specs
+  pileId          String
+  pileDiameterMm  Float
+  pileDepthM      Float
+  concreteGrade   String
+  designLoadT     Float
+  testLoadT       Float    // Should default to 2.5 * designLoadT
+  
+  // Equipment Specs
+  jackName        String
+  ramAreaCm2      Float
+  gaugeLeastCountMm Float
+  
+  // State
+  status          TestStatus @default(DRAFT)
+  readings        Reading[]
+  images          SiteImage[]
+  certificates    CalibrationCertificate[]
+  
+  // Computed Results (Cached)
+  maxSettlement   Float?
+  netSettlement   Float?
+  isPassed        Boolean?
+  conclusion      String?  // AI Generated
+}
+
+model Reading {
+  id              String   @id @default(uuid())
+  testId          String
+  test            Test     @relation(fields: [testId], references: [id])
+  sequence        Int
+  phase           TestPhase // LOADING, HOLD, UNLOADING
+  
+  timeRecorded    DateTime
+  pressureKgCm2   Float
+  loadT           Float    // Stored to ensure historical accuracy if Ram Area changes
+  
+  // Gauge Readings
+  dg1             Float
+  dg2             Float
+  dg3             Float
+  dg4             Float
+  
+  // Gauge Status (True = Working, False = Faulty)
+  dg1Enabled      Boolean @default(true)
+  dg2Enabled      Boolean @default(true)
+  dg3Enabled      Boolean @default(true)
+  dg4Enabled      Boolean @default(true)
+  
+  avgSettlement   Float
+  remarks         String?
+}
+
+enum TestPhase {
+  LOADING
+  HOLD
+  UNLOADING
+}
+```
+
+-----
+
+## 3\. PDF Report Generation Strategy
+
+**Tooling:** Use `Puppeteer` or a React-to-PDF library.
+**Structure:** The PDF must strictly follow the `Report IVPLT TP-04` layout.
+
+### Section 1: Title Page & Context
+
+  * **Header:** Logos (Client, PMC, Contractor, Lab).
+  * **Content:** Project Name (Bold, Uppercase), Pile ID, Site Location (Google Maps text).
+  * **Footer:** Page Numbers.
+
+### Section 2: General & Scope
+
+  * **Standard Text:** Use the standardized text from *Source: Developer Guidelines.pdf* (Page 2), dynamically injecting:
+      * Client Name
+      * Pile Diameter
+      * Design Load / Test Load
+  * **Table:** "Pile Details" (Diameter, Depth, Grade, Safe Capacity).
+
+### Section 3: Methodology
+
+  * **Hardcoded Compliance Text:** "The load testing... conducted as per IS: 2911 (Part 4) 2013."
+  * **Equipment:** Inject Jack Capacity and Ram Area.
+  * **Loading Sequence:** Describe the 20% increment logic.
+
+### Section 4: Results & Conclusion (AI Powered)
+
+  * **Result Table:** Max Settlement, Total Rebound, Net Settlement.
+  * **Acceptance Criteria:** List the two criteria from IS 2911.
+  * **Conclusion:** This is where User Story 5 (AI) applies.
+      * *AI Prompt:* "Generate a formal engineering conclusion for an IVPLT test. Max settlement: {max}mm, Net settlement: {net}mm, Limit: 12mm. Design Load: {load}T. Result: {pass/fail}. Use active voice. Reference IS 2911."
+
+### Section 5: Data Tables (The Grid)
+
+  * **Columns:** Date | Time | Pressure | Load (MT) | DG1 | DG2 | DG3 | DG4 | Avg Settlement | Remark.
+  * **Formatting:** Alternating row colors. Bold font for Phase transitions (e.g., "UNLOADING").
+
+### Section 6: Graph (Critical)
+
+  * **X-Axis:** Settlement (mm) (Inverted, 0 at top, increasing downwards).
+  * **Y-Axis:** Load (MT).
+  * **Series:**
+      * **Loading Curve:** Solid Blue Line.
+      * **Unloading Curve:** Dashed or Green Line.
+  * **Annotations:** Horizontal line at Safe Load; Vertical line at 12mm limit.
+
+### Section 7: Site Images
+
+  * **Layout:** Grid of 2 images per page.
+  * **Captions:** Render caption text below each image.
+
+### Section 8: Calibration Certificates
+
+  * **Logic:** These are existing PDFs uploaded by the user.
+  * **Implementation:** Use a PDF merging library (e.g., `pdf-lib`) to append these files *after* the generated report pages. Do not try to re-render them; append the raw pages.
+
+-----
+
+## 4\. Frontend & Data Entry (User Stories 1-4)
+
+### Data Entry Grid
+
+  * **UX:** Use a spreadsheet-like interface (Ag-Grid or Handsontable).
+  * **Tab Navigation:** Users must be able to Tab from `Pressure` -\> `DG1` -\> `DG2`... -\> `Next Row Pressure`.
+  * **Auto-Calculation:** Changing `Pressure` must update `Load` instantly. Changing `DG` must update `Avg` instantly.
+
+### Calibration Certificate Manager
+
+  * **Validation:** Only accept PDF. Max size 5MB.
+  * **Types:** Enforce selection of type (Jack, Master Gauge, Dial Gauge) to sort them correctly in the final report.
+
+### Real-time Chart (Preview)
+
+  * Use `Recharts` or `Chart.js`.
+  * This chart must be identical to the one generated in the PDF.
+  * **Performance:** Do not re-render the chart on every keystroke; debounce updates (e.g., 500ms).
+
+-----
+
+## 5\. Quality Assurance Checklist
+
+Before marking the feature as complete, verify against these scenarios:
+
+1.  **The "Faulty Gauge" Test:** Disable Gauge 3. Verify the Average is $(G1+G2+G4)/3$.
+2.  **The "2.5x" Logic:** Enter a Design Load of 100T. Verify Test Load auto-sets to 250T.
+3.  **The "IS 2911" Pass/Fail:**
+      * Scenario A: Net settlement 11mm. Result: PASS.
+      * Scenario B: Net settlement 13mm. Result: FAIL.
+4.  **PDF Assembly:** Upload a 2-page calibration certificate. Ensure the final PDF is (Report Pages) + (2 Cert Pages).
+    """,
+    "fileName": "IVPLT\_Developer\_Guidelines.md"
+    }
+    )

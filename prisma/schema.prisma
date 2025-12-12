@@ -1,0 +1,218 @@
+// Prisma schema for IVPLT Report Automation
+// Why: Defines the database structure for Supabase PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+/// Types of pile load tests supported by the system.
+/// Why: Enables Test Type Engine pattern for polymorphic behavior.
+enum TestType {
+  IVPLT   // Initial Vertical Pile Load Test (2.5x design load, 12mm limit)
+  RVPLT   // Routine Vertical Pile Load Test (1.5x design load, 18mm limit)
+  LATERAL // Lateral Load Test (2.5x design load, 5mm deflection limit)
+  UPLIFT  // Uplift/Pullout Test (2.5x design load, 12mm uplift limit)
+}
+
+/// Phases during a pile load test.
+/// Why: Readings are grouped by phase for display and graph rendering.
+enum TestPhase {
+  LOADING   // Incremental loading phase
+  HOLD      // 24-hour hold at maximum load
+  UNLOADING // Decremental unloading phase
+}
+
+/// Status of a test throughout its lifecycle.
+/// Why: Controls UI flow and report generation eligibility.
+enum TestStatus {
+  DRAFT       // Initial state, incomplete data
+  IN_PROGRESS // Data entry in progress
+  COMPLETED   // All readings entered, ready for report
+  REPORTED    // PDF generated and exported
+}
+
+/// Types of calibration certificates.
+/// Why: Certificates are categorized for proper ordering in final report.
+enum CertificateType {
+  HYDRAULIC_JACK
+  PRESSURE_GAUGE
+  DIAL_GAUGE
+  PROVING_RING
+  OTHER
+}
+
+// =============================================================================
+// MODELS
+// =============================================================================
+
+/// Project-level container for multiple tests.
+/// Why: Groups tests by construction project, stores common client/contractor info.
+model Project {
+  id          String   @id @default(uuid())
+  name        String   // Project name
+  client      String   // Client organization (e.g., "NMC")
+  contractor  String   // Contractor company
+  pmc         String?  // Project Management Consultant (optional)
+  location    String   // Site location
+
+  tests       Test[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// A single pile load test instance.
+/// Why: Core entity containing pile specs, equipment info, and test state.
+model Test {
+  id              String     @id @default(uuid())
+  projectId       String
+  project         Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Test identification
+  testType        TestType   @default(IVPLT)
+  reportNo        String?    // User-defined report number
+  testDate        DateTime   @default(now())
+
+  // Pile specifications
+  pileId          String     // e.g., "TP-02"
+  pileDiameterMm  Float      // Pile diameter in millimeters
+  pileDepthM      Float      // Pile depth in meters
+  concreteGrade   String     // e.g., "M25", "M35"
+
+  // Load specifications
+  designLoadT     Float      // Design safe load in metric tons
+  testLoadT       Float      // Calculated test load (auto: multiplier × designLoad)
+
+  // Equipment specifications
+  jackName        String?    // Hydraulic jack identifier
+  ramAreaCm2      Float      // Ram area in cm² for load calculation
+  gaugeLeastCountMm Float    @default(0.01) // Dial gauge sensitivity
+
+  // Test state
+  status          TestStatus @default(DRAFT)
+
+  // Computed results (cached on report generation)
+  maxSettlementMm   Float?
+  elasticReboundMm  Float?
+  netSettlementMm   Float?
+  safeLoadAdoptedT  Float?
+  isPassed          Boolean?
+  conclusion        String?  @db.Text // AI-generated or user-edited
+
+  // Relations
+  readings        Reading[]
+  siteImages      SiteImage[]
+  certificates    CalibrationCertificate[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([testType])
+}
+
+/// A single measurement during the test.
+/// Why: Captures time-stamped pressure/settlement data with gauge status.
+model Reading {
+  id              String    @id @default(uuid())
+  testId          String
+  test            Test      @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  // Sequence and phase
+  sequence        Int       // Reading number (1, 2, 3...)
+  phase           TestPhase // LOADING, HOLD, or UNLOADING
+
+  // Timestamp
+  recordedAt      DateTime  @default(now())
+
+  // Pressure and calculated load
+  pressureKgCm2   Float     // Raw pressure gauge reading
+  loadT           Float     // Calculated: (pressure × ramArea) / 1000
+
+  // Dial gauge readings (mm)
+  dg1             Float
+  dg2             Float
+  dg3             Float
+  dg4             Float
+
+  // Gauge status (true = working, false = faulty)
+  dg1Enabled      Boolean   @default(true)
+  dg2Enabled      Boolean   @default(true)
+  dg3Enabled      Boolean   @default(true)
+  dg4Enabled      Boolean   @default(true)
+
+  // Computed average (only from enabled gauges)
+  avgSettlementMm Float
+
+  // Optional remarks
+  remark          String?
+
+  createdAt       DateTime  @default(now())
+
+  @@unique([testId, sequence])
+  @@index([testId])
+}
+
+/// Site photo attached to a test.
+/// Why: Visual documentation of test setup for report inclusion.
+model SiteImage {
+  id          String   @id @default(uuid())
+  testId      String
+  test        Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  // Storage reference
+  storagePath String   // Supabase Storage path
+  fileName    String   // Original filename
+
+  // Display
+  caption     String?  // Optional caption (max 200 chars)
+  displayOrder Int     // For ordering in report (1, 2, 3...)
+
+  createdAt   DateTime @default(now())
+
+  @@index([testId])
+}
+
+/// Calibration certificate PDF attached to a test.
+/// Why: Appended to final report for IS 2911 compliance documentation.
+model CalibrationCertificate {
+  id              String          @id @default(uuid())
+  testId          String
+  test            Test            @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  // Certificate metadata
+  certificateType CertificateType
+  storagePath     String          // Supabase Storage path
+  fileName        String          // Original filename
+
+  createdAt       DateTime        @default(now())
+
+  // One certificate per type per test
+  @@unique([testId, certificateType])
+  @@index([testId])
+}
+
+/// User profile for signatures and identification.
+/// Why: Stores engineer name for report attribution.
+model UserProfile {
+  id          String   @id @default(uuid())
+  name        String
+  email       String?  @unique
+  company     String?
+  designation String?  // e.g., "Site Engineer"
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+

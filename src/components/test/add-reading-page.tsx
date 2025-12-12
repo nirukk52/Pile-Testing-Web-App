@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, ArrowLeft, PenTool } from 'lucide-react';
-import type { ProjectInfo, TestPhase } from '@/types';
-import { calculateLoad, calculateAverageSettlement } from '@/types';
+import { Check, ArrowLeft, PenTool, AlertTriangle } from 'lucide-react';
+import type { LegacyProjectInfo, LegacyTestPhase } from '@/types';
+import { calculateLoad } from '@/types';
 
 /**
  * Data structure for a new reading.
@@ -17,9 +17,13 @@ export interface NewReadingData {
   dialGauge2: string;
   dialGauge3: string;
   dialGauge4: string;
+  dg1Enabled: boolean;
+  dg2Enabled: boolean;
+  dg3Enabled: boolean;
+  dg4Enabled: boolean;
   remark: string;
   signature: string;
-  phase: TestPhase;
+  phase: LegacyTestPhase;
 }
 
 /**
@@ -29,7 +33,31 @@ export interface NewReadingData {
 interface AddReadingPageProps {
   onSave: (data: NewReadingData) => void;
   onCancel: () => void;
-  projectInfo: ProjectInfo;
+  projectInfo: LegacyProjectInfo;
+}
+
+/**
+ * Calculate average from enabled gauges only.
+ * Why: Faulty gauges should be excluded from average calculation per IS 2911.
+ */
+function calculateAverageWithEnabled(
+  g1: string, g2: string, g3: string, g4: string,
+  e1: boolean, e2: boolean, e3: boolean, e4: boolean
+): string {
+  const values = [
+    { value: g1, enabled: e1 },
+    { value: g2, enabled: e2 },
+    { value: g3, enabled: e3 },
+    { value: g4, enabled: e4 },
+  ]
+    .filter((g) => g.enabled)
+    .map((g) => parseFloat(g.value))
+    .filter((v) => !isNaN(v));
+
+  if (values.length > 0) {
+    return (values.reduce((a, b) => a + b, 0) / values.length).toFixed(2);
+  }
+  return '-';
 }
 
 /**
@@ -45,13 +73,24 @@ export function AddReadingPage({ onSave, onCancel, projectInfo }: AddReadingPage
   const [dialGauge2, setDialGauge2] = useState('');
   const [dialGauge3, setDialGauge3] = useState('');
   const [dialGauge4, setDialGauge4] = useState('');
+  const [dg1Enabled, setDg1Enabled] = useState(true);
+  const [dg2Enabled, setDg2Enabled] = useState(true);
+  const [dg3Enabled, setDg3Enabled] = useState(true);
+  const [dg4Enabled, setDg4Enabled] = useState(true);
   const [remark, setRemark] = useState('');
   const [signature, setSignature] = useState('');
   const [confirmed, setConfirmed] = useState(false);
-  const [phase, setPhase] = useState<TestPhase>('loading');
+  const [phase, setPhase] = useState<LegacyTestPhase>('loading');
 
   const load = calculateLoad(pressure, projectInfo.ramArea);
-  const average = calculateAverageSettlement(dialGauge1, dialGauge2, dialGauge3, dialGauge4);
+  const average = calculateAverageWithEnabled(
+    dialGauge1, dialGauge2, dialGauge3, dialGauge4,
+    dg1Enabled, dg2Enabled, dg3Enabled, dg4Enabled
+  );
+
+  // Count enabled gauges
+  const enabledCount = [dg1Enabled, dg2Enabled, dg3Enabled, dg4Enabled].filter(Boolean).length;
+  const hasDisabledGauge = enabledCount < 4;
 
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseInt(e.target.value);
@@ -59,14 +98,21 @@ export function AddReadingPage({ onSave, onCancel, projectInfo }: AddReadingPage
   };
 
   const isFormValid = () => {
+    // At least one gauge must be enabled
+    if (enabledCount === 0) return false;
+
+    // Check required fields for enabled gauges only
+    const hasRequiredGaugeValues = 
+      (!dg1Enabled || dialGauge1) &&
+      (!dg2Enabled || dialGauge2) &&
+      (!dg3Enabled || dialGauge3) &&
+      (!dg4Enabled || dialGauge4);
+
     return (
       date &&
       time &&
       pressure &&
-      dialGauge1 &&
-      dialGauge2 &&
-      dialGauge3 &&
-      dialGauge4 &&
+      hasRequiredGaugeValues &&
       signature &&
       confirmed
     );
@@ -78,10 +124,14 @@ export function AddReadingPage({ onSave, onCancel, projectInfo }: AddReadingPage
         date,
         time,
         pressure,
-        dialGauge1,
-        dialGauge2,
-        dialGauge3,
-        dialGauge4,
+        dialGauge1: dialGauge1 || '0',
+        dialGauge2: dialGauge2 || '0',
+        dialGauge3: dialGauge3 || '0',
+        dialGauge4: dialGauge4 || '0',
+        dg1Enabled,
+        dg2Enabled,
+        dg3Enabled,
+        dg4Enabled,
         remark,
         signature,
         phase,
@@ -91,7 +141,54 @@ export function AddReadingPage({ onSave, onCancel, projectInfo }: AddReadingPage
 
   const inputClass =
     'w-full h-12 px-4 rounded-lg border border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all text-slate-900';
+  const disabledInputClass =
+    'w-full h-12 px-4 rounded-lg border border-red-200 bg-red-50 text-red-400 line-through cursor-not-allowed';
   const labelClass = 'block text-sm text-slate-600 mb-2';
+
+  /**
+   * Render a dial gauge input with enable/disable toggle.
+   * Why: Allows marking faulty gauges per IS 2911 requirements.
+   */
+  const renderGaugeInput = (
+    label: string,
+    value: string,
+    setValue: (v: string) => void,
+    enabled: boolean,
+    setEnabled: (v: boolean) => void
+  ) => (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <label className={`text-sm ${enabled ? 'text-slate-600' : 'text-red-500 font-medium'}`}>
+          {label} {enabled && <span className="text-rose-600">*</span>}
+          {!enabled && (
+            <span className="ml-2 text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-semibold">
+              FAULTY
+            </span>
+          )}
+        </label>
+        <button
+          type="button"
+          onClick={() => setEnabled(!enabled)}
+          className={`text-xs px-3 py-1 rounded-full font-medium transition-colors ${
+            enabled
+              ? 'bg-green-100 text-green-700 hover:bg-green-200'
+              : 'bg-red-100 text-red-700 hover:bg-red-200'
+          }`}
+        >
+          {enabled ? '✓ Working' : '✗ Faulty'}
+        </button>
+      </div>
+      <input
+        type="number"
+        step="0.01"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder={enabled ? '0.00' : 'Disabled'}
+        disabled={!enabled}
+        className={enabled ? inputClass : disabledInputClass}
+      />
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 bg-gray-100 z-50 overflow-y-auto">
@@ -173,71 +270,43 @@ export function AddReadingPage({ onSave, onCancel, projectInfo }: AddReadingPage
 
         {/* Dial Gauge Readings Card */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
-          <h2 className="text-slate-800 font-semibold">Dial Gauge Readings</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-slate-800 font-semibold">Dial Gauge Readings</h2>
+            {hasDisabledGauge && (
+              <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" />
+                {4 - enabledCount} faulty
+              </span>
+            )}
+          </div>
+
+          {/* Warning if gauges are disabled */}
+          {enabledCount === 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+              <span className="text-red-700 text-sm">At least one gauge must be working</span>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>
-                R1 (mm) <span className="text-rose-600">*</span>
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={dialGauge1}
-                onChange={(e) => setDialGauge1(e.target.value)}
-                placeholder="0.00"
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <label className={labelClass}>
-                R2 (mm) <span className="text-rose-600">*</span>
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={dialGauge2}
-                onChange={(e) => setDialGauge2(e.target.value)}
-                placeholder="0.00"
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <label className={labelClass}>
-                R3 (mm) <span className="text-rose-600">*</span>
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={dialGauge3}
-                onChange={(e) => setDialGauge3(e.target.value)}
-                placeholder="0.00"
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <label className={labelClass}>
-                R4 (mm) <span className="text-rose-600">*</span>
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={dialGauge4}
-                onChange={(e) => setDialGauge4(e.target.value)}
-                placeholder="0.00"
-                className={inputClass}
-              />
-            </div>
+            {renderGaugeInput('R1 (mm)', dialGauge1, setDialGauge1, dg1Enabled, setDg1Enabled)}
+            {renderGaugeInput('R2 (mm)', dialGauge2, setDialGauge2, dg2Enabled, setDg2Enabled)}
+            {renderGaugeInput('R3 (mm)', dialGauge3, setDialGauge3, dg3Enabled, setDg3Enabled)}
+            {renderGaugeInput('R4 (mm)', dialGauge4, setDialGauge4, dg4Enabled, setDg4Enabled)}
           </div>
 
           {/* Average Display */}
-          {dialGauge1 && dialGauge2 && dialGauge3 && dialGauge4 && (
+          {enabledCount > 0 && average !== '-' && (
             <div className="bg-green-50 rounded-lg p-4 border border-green-200">
               <div className="flex justify-between items-center">
-                <span className="text-green-700">Average Settlement:</span>
+                <div>
+                  <span className="text-green-700">Average Settlement:</span>
+                  {hasDisabledGauge && (
+                    <span className="text-green-600 text-xs ml-2">
+                      (from {enabledCount} gauge{enabledCount > 1 ? 's' : ''})
+                    </span>
+                  )}
+                </div>
                 <span className="text-green-900 font-semibold text-lg">{average} mm</span>
               </div>
             </div>
