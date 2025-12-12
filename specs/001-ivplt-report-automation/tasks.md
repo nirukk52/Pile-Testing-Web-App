@@ -180,7 +180,7 @@
 
 ---
 
-## Phase 8: User Story 5 - AI-Generated Conclusion with Override (Priority: P3)
+## Phase 8: User Story 5 - AI-Generated Conclusion with Override (Priority: P3) ✅ DONE
 
 **Goal**: System generates IS 2911-compliant conclusion, user can edit before finalizing
 
@@ -188,14 +188,14 @@
 
 ### Implementation for User Story 5
 
-- [ ] T073 [US5] Create Conclusion API route in `src/app/api/tests/[testId]/conclusion/route.ts`
-- [ ] T074 [US5] Implement AI prompt template from engine.getAIConclusionPrompt()
-- [ ] T075 [US5] Add OpenAI/Anthropic API integration in conclusion route
-- [ ] T076 [US5] Add fallback static template when AI unavailable
-- [ ] T077 [US5] Add "Generate Conclusion" button to report-view.tsx
-- [ ] T078 [US5] Add editable textarea for conclusion with save button
-- [ ] T079 [US5] Store edited conclusion in Test.conclusion field
-- [ ] T080 [US5] Use custom conclusion in PDF generation if provided
+- [x] T073 [US5] Create Conclusion API route in `src/app/api/tests/[testId]/conclusion/route.ts`
+- [x] T074 [US5] Implement AI prompt template from engine.getAIConclusionPrompt()
+- [x] T075 [US5] Add OpenAI Agents SDK integration via `src/lib/ai/conclusion-agent.ts`
+- [x] T076 [US5] Add fallback static template when AI unavailable
+- [x] T077 [US5] Add "Generate Conclusion" button to report-view.tsx
+- [x] T078 [US5] Add editable textarea for conclusion with save button
+- [x] T079 [US5] Store edited conclusion in Test.conclusion field
+- [x] T080 [US5] Use custom conclusion in PDF generation if provided
 
 **Checkpoint**: User Story 5 complete - AI conclusion works with override capability
 

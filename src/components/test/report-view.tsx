@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useMemo, useState, useCallback } from 'react';
-import { Download, CheckCircle2, XCircle, AlertCircle, Loader2, FileText } from 'lucide-react';
+import { Download, CheckCircle2, XCircle, AlertCircle, Loader2, FileText, Sparkles, Edit3, Save, X, RotateCcw } from 'lucide-react';
 import type { LoadEntry, LegacyProjectInfo } from '@/types';
 import { calculateAverageSettlement, TEST_TYPES } from '@/types';
 import { getTestEngine } from '@/engines';
@@ -28,6 +28,15 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
   const chartInstanceRef = useRef<unknown>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  // Conclusion state
+  const [conclusion, setConclusion] = useState<string>('');
+  const [conclusionDraft, setConclusionDraft] = useState<string>('');
+  const [isGeneratingConclusion, setIsGeneratingConclusion] = useState(false);
+  const [isEditingConclusion, setIsEditingConclusion] = useState(false);
+  const [isSavingConclusion, setIsSavingConclusion] = useState(false);
+  const [conclusionSource, setConclusionSource] = useState<'ai' | 'template' | 'saved' | null>(null);
+  const [conclusionError, setConclusionError] = useState<string | null>(null);
 
   // Get test type engine
   const testType = (projectInfo.testType as TestType) || 'IVPLT';
@@ -153,6 +162,120 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
   const handlePrint = () => {
     window.print();
   };
+
+  /**
+   * Fetch existing conclusion on mount (if testId exists).
+   * Why: Load any previously saved conclusion.
+   */
+  useEffect(() => {
+    if (!testId) return;
+
+    const fetchConclusion = async () => {
+      try {
+        const response = await fetch(`/api/tests/${testId}/conclusion`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.conclusion) {
+            setConclusion(data.conclusion);
+            setConclusionSource('saved');
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch conclusion:', error);
+      }
+    };
+
+    fetchConclusion();
+  }, [testId]);
+
+  /**
+   * Generate conclusion using AI or fallback template.
+   * Why: Creates IS 2911-compliant conclusion text.
+   */
+  const handleGenerateConclusion = useCallback(async () => {
+    if (!testId) {
+      setConclusionError('Test must be saved to database to generate conclusion');
+      return;
+    }
+
+    setIsGeneratingConclusion(true);
+    setConclusionError(null);
+
+    try {
+      const response = await fetch(`/api/tests/${testId}/conclusion`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate conclusion');
+      }
+
+      const data = await response.json();
+      setConclusion(data.conclusion);
+      setConclusionDraft(data.conclusion);
+      setConclusionSource(data.isAIGenerated ? 'ai' : 'template');
+
+      if (data.error) {
+        setConclusionError(`Using template: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to generate conclusion:', error);
+      setConclusionError(error instanceof Error ? error.message : 'Failed to generate conclusion');
+    } finally {
+      setIsGeneratingConclusion(false);
+    }
+  }, [testId]);
+
+  /**
+   * Save edited conclusion.
+   * Why: Persists user edits to database.
+   */
+  const handleSaveConclusion = useCallback(async () => {
+    if (!testId || !conclusionDraft.trim()) return;
+
+    setIsSavingConclusion(true);
+    setConclusionError(null);
+
+    try {
+      const response = await fetch(`/api/tests/${testId}/conclusion`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conclusion: conclusionDraft }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save conclusion');
+      }
+
+      setConclusion(conclusionDraft);
+      setConclusionSource('saved');
+      setIsEditingConclusion(false);
+    } catch (error) {
+      console.error('Failed to save conclusion:', error);
+      setConclusionError(error instanceof Error ? error.message : 'Failed to save conclusion');
+    } finally {
+      setIsSavingConclusion(false);
+    }
+  }, [testId, conclusionDraft]);
+
+  /**
+   * Cancel editing and revert to saved version.
+   */
+  const handleCancelEdit = useCallback(() => {
+    setConclusionDraft(conclusion);
+    setIsEditingConclusion(false);
+  }, [conclusion]);
+
+  /**
+   * Start editing the conclusion.
+   */
+  const handleStartEdit = useCallback(() => {
+    setConclusionDraft(conclusion);
+    setIsEditingConclusion(true);
+  }, [conclusion]);
 
   // Prepare chart with loading and unloading curves
   useEffect(() => {
@@ -569,6 +692,108 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
           )}
         </div>
       </div>
+
+      {/* Conclusion Section */}
+      {testId && (
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-slate-800">4.0 Results & Conclusion</h3>
+              {conclusionSource && (
+                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                  conclusionSource === 'ai' 
+                    ? 'bg-purple-100 text-purple-700' 
+                    : conclusionSource === 'saved'
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {conclusionSource === 'ai' ? '✨ AI Generated' : 
+                   conclusionSource === 'saved' ? '✓ Saved' : 
+                   'Template'}
+                </span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              {!isEditingConclusion && conclusion && (
+                <button
+                  onClick={handleStartEdit}
+                  className="text-slate-600 hover:text-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-sm font-medium hover:bg-slate-100 transition-colors"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  Edit
+                </button>
+              )}
+              {!isEditingConclusion && (
+                <button
+                  onClick={handleGenerateConclusion}
+                  disabled={isGeneratingConclusion || loadEntries.length === 0}
+                  className="bg-purple-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-sm font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isGeneratingConclusion ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
+                  {isGeneratingConclusion ? 'Generating...' : conclusion ? 'Regenerate' : 'Generate Conclusion'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {conclusionError && (
+            <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-700 text-sm flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              {conclusionError}
+            </div>
+          )}
+
+          {isEditingConclusion ? (
+            <div className="space-y-3">
+              <textarea
+                value={conclusionDraft}
+                onChange={(e) => setConclusionDraft(e.target.value)}
+                className="w-full h-48 p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-y text-sm leading-relaxed"
+                placeholder="Enter or edit the conclusion text..."
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={handleCancelEdit}
+                  className="px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors border border-slate-300"
+                >
+                  <X className="w-4 h-4" />
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveConclusion}
+                  disabled={isSavingConclusion || !conclusionDraft.trim()}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSavingConclusion ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  {isSavingConclusion ? 'Saving...' : 'Save Conclusion'}
+                </button>
+              </div>
+            </div>
+          ) : conclusion ? (
+            <div className="prose prose-slate prose-sm max-w-none">
+              <div className="whitespace-pre-wrap text-slate-700 leading-relaxed bg-slate-50 rounded-lg p-4 border border-slate-200">
+                {conclusion}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-slate-50 rounded-lg p-8 text-center">
+              <Sparkles className="w-10 h-10 text-purple-300 mx-auto mb-3" />
+              <p className="text-slate-500 mb-2">No conclusion generated yet</p>
+              <p className="text-slate-400 text-sm">
+                Click &quot;Generate Conclusion&quot; to create an IS 2911-compliant conclusion using AI
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Data Table */}
       <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">

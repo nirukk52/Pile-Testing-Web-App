@@ -67,7 +67,13 @@ src/
 │   └── index.ts                # TypeScript interfaces + calculation helpers
 │
 ├── lib/
-│   └── utils.ts                # General utilities (cn, etc.)
+│   ├── utils.ts                # General utilities (cn, etc.)
+│   ├── ai/
+│   │   ├── conclusion-agent.ts # AI conclusion generation via @openai/agents
+│   │   └── index.ts            # Barrel export
+│   └── pdf/
+│       ├── generator.ts        # Playwright PDF generation
+│       └── templates/          # HTML templates for PDF
 │
 ├── styles/
 │   └── globals.css             # Tailwind directives + custom styles
@@ -320,6 +326,7 @@ This code is excluded from TypeScript compilation via `tsconfig.json`.
 ## Active Technologies
 - TypeScript 5+, Node.js 18+ + Next.js 14 (App Router), Zustand 4+, Chart.js 4+, Playwright (PDF), Prisma ORM (001-ivplt-report-automation)
 - Supabase PostgreSQL + Supabase Storage (images/certificates) (001-ivplt-report-automation)
+- @openai/agents SDK for AI-generated conclusions (Phase 5 - 001-ivplt-report-automation)
 
 ## Recent Changes
 - 001-ivplt-report-automation: Added TypeScript 5+, Node.js 18+ + Next.js 14 (App Router), Zustand 4+, Chart.js 4+, Playwright (PDF), Prisma ORM
