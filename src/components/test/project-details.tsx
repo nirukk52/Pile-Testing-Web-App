@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
-import { ChevronRight, Calculator } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ChevronRight, Calculator, Loader2, CloudOff, Check } from 'lucide-react';
 import type { LegacyProjectInfo } from '@/types';
 import { TEST_TYPES } from '@/types';
+import { useApiSync } from '@/store/test-store';
 
 /**
  * Props for the ProjectDetails component.
@@ -24,13 +25,38 @@ export function ProjectDetails({
   onUpdateField,
   onNext,
 }: ProjectDetailsProps) {
+  const { saveTestToApi, isLoading, error } = useApiSync();
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
   const handleChange = (field: keyof LegacyProjectInfo, value: string) => {
     onUpdateField(field, value as LegacyProjectInfo[typeof field]);
+    setSaveStatus('idle'); // Reset save status when user makes changes
   };
 
   // Get test type config for multiplier
   const testTypeConfig = TEST_TYPES.find(t => t.id === projectInfo.testType);
   const loadMultiplier = testTypeConfig?.loadMultiplier || 2.5;
+
+  // Handle continue - save to API first
+  const handleContinue = async () => {
+    if (!isFormValid()) return;
+    
+    setIsSaving(true);
+    setSaveStatus('saving');
+    try {
+      await saveTestToApi();
+      setSaveStatus('saved');
+      onNext();
+    } catch (err) {
+      console.error('Failed to save:', err);
+      setSaveStatus('error');
+      // Still allow proceeding with local data
+      onNext();
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // Auto-calculate test load when design load changes
   useEffect(() => {
@@ -326,18 +352,45 @@ export function ProjectDetails({
         </div>
       </div>
 
+      {/* Save Status Indicator */}
+      {saveStatus !== 'idle' && (
+        <div className={`rounded-lg p-3 flex items-center gap-2 text-sm ${
+          saveStatus === 'saving' ? 'bg-blue-50 text-blue-700' :
+          saveStatus === 'saved' ? 'bg-green-50 text-green-700' :
+          'bg-red-50 text-red-700'
+        }`}>
+          {saveStatus === 'saving' && <Loader2 className="w-4 h-4 animate-spin" />}
+          {saveStatus === 'saved' && <Check className="w-4 h-4" />}
+          {saveStatus === 'error' && <CloudOff className="w-4 h-4" />}
+          <span>
+            {saveStatus === 'saving' && 'Saving to cloud...'}
+            {saveStatus === 'saved' && 'Saved to cloud'}
+            {saveStatus === 'error' && 'Failed to save to cloud. Data saved locally.'}
+          </span>
+        </div>
+      )}
+
       {/* Continue Button */}
       <button
-        onClick={onNext}
-        disabled={!isFormValid()}
+        onClick={handleContinue}
+        disabled={!isFormValid() || isSaving}
         className={`w-full py-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm font-semibold ${
-          isFormValid()
+          isFormValid() && !isSaving
             ? 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'
             : 'bg-slate-200 text-slate-400 cursor-not-allowed'
         }`}
       >
-        <span>Continue to Data Entry</span>
-        <ChevronRight className="w-5 h-5" />
+        {isSaving ? (
+          <>
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span>Saving...</span>
+          </>
+        ) : (
+          <>
+            <span>Continue to Data Entry</span>
+            <ChevronRight className="w-5 h-5" />
+          </>
+        )}
       </button>
     </div>
   );

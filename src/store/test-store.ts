@@ -11,13 +11,15 @@ import type {
   AppView,
   TestType,
   PileTestSummary,
+  LegacyReading,
+  LegacyTestPhase,
 } from '@/types';
 import { EMPTY_PROJECT_INFO } from '@/types';
+import * as api from '@/lib/api';
 
 /**
  * Main application state for pile testing.
- * Why: Centralized state management that persists tests to localStorage.
- * Note: Uses LegacyProjectInfo for backward compatibility with existing components.
+ * Why: Centralized state management that syncs with Supabase via API.
  */
 interface TestState {
   // App navigation
@@ -25,18 +27,24 @@ interface TestState {
   currentTestId: string | null;
   currentStep: WorkflowStep;
 
-  // All saved tests
+  // All saved tests (from API)
   allTests: SavedTest[];
 
-  // Current test being edited (using legacy type for compatibility)
+  // Current test being edited (using legacy type for UI compatibility)
   projectInfo: LegacyProjectInfo;
   loadEntries: LoadEntry[];
+
+  // Supabase IDs for current test
+  supabaseProjectId: string | null;
+  supabaseTestId: string | null;
 
   // User profile
   userProfile: UserProfile;
 
   // UI state
   showProfileModal: boolean;
+  isLoading: boolean;
+  error: string | null;
 }
 
 /**
@@ -71,9 +79,17 @@ interface TestActions {
   setUserProfile: (profile: UserProfile) => void;
   setShowProfileModal: (show: boolean) => void;
 
+  // API operations
+  loadTestsFromApi: () => Promise<void>;
+  saveTestToApi: () => Promise<void>;
+  addReadingToApi: (reading: LegacyReading) => Promise<api.ApiReading>;
+  deleteReadingFromApi: (readingId: string) => Promise<void>;
+
   // Helpers
   getTestSummaries: () => PileTestSummary[];
   reset: () => void;
+  setError: (error: string | null) => void;
+  setLoading: (loading: boolean) => void;
 }
 
 /**
@@ -87,17 +103,93 @@ const initialState: TestState = {
   allTests: [],
   projectInfo: EMPTY_PROJECT_INFO,
   loadEntries: [],
+  supabaseProjectId: null,
+  supabaseTestId: null,
   userProfile: {
     name: '',
     initials: '',
     signature: '',
   },
   showProfileModal: false,
+  isLoading: false,
+  error: null,
 };
 
 /**
- * Zustand store for managing pile test state with localStorage persistence.
- * Why: Single source of truth for all app data that survives page refreshes.
+ * Convert API Test to SavedTest for UI compatibility
+ */
+function apiTestToSavedTest(test: api.ApiTest): SavedTest {
+  const projectInfo: LegacyProjectInfo = {
+    reportNo: test.reportNo || '',
+    project: test.project?.name || '',
+    location: test.project?.location || '',
+    contractor: test.project?.contractor || '',
+    client: test.project?.client || '',
+    pmc: test.project?.pmc || '',
+    pileId: test.pileId,
+    testDate: test.testDate.split('T')[0],
+    jackName: test.jackName || '',
+    lcOfDialGauge: test.gaugeLeastCountMm.toString(),
+    designLoadOnPile: test.designLoadT.toString(),
+    testLoad: test.testLoadT.toString(),
+    mixedDesign: test.concreteGrade,
+    pileDiameter: test.pileDiameterMm.toString(),
+    ramArea: test.ramAreaCm2.toString(),
+    dateOfCasting: '',
+    pileDepth: test.pileDepthM.toString(),
+    testType: test.testType,
+  };
+
+  // Convert API readings to legacy format
+  const loadEntries: LoadEntry[] = [];
+  if (test.readings && test.readings.length > 0) {
+    // Group readings by load for display (simplified - one reading per entry)
+    test.readings.forEach((reading) => {
+      const phaseMap: Record<string, LegacyTestPhase> = {
+        LOADING: 'loading',
+        HOLD: 'holding',
+        UNLOADING: 'unloading',
+      };
+
+      const legacyReading: LegacyReading = {
+        id: reading.id,
+        pressureGauge: reading.pressureKgCm2.toString(),
+        load: reading.loadT.toFixed(2),
+        dialGauge1: reading.dg1.toString(),
+        dialGauge2: reading.dg2.toString(),
+        dialGauge3: reading.dg3.toString(),
+        dialGauge4: reading.dg4.toString(),
+        dg1Enabled: reading.dg1Enabled,
+        dg2Enabled: reading.dg2Enabled,
+        dg3Enabled: reading.dg3Enabled,
+        dg4Enabled: reading.dg4Enabled,
+        timestamp: reading.recordedAt,
+        remark: reading.remark || '',
+        phase: phaseMap[reading.phase] || 'loading',
+      };
+
+      loadEntries.push({
+        id: `entry-${reading.id}`,
+        pressureGauge: reading.pressureKgCm2.toString(),
+        load: reading.loadT.toFixed(2),
+        readings: [legacyReading],
+        timestamp: reading.recordedAt,
+      });
+    });
+  }
+
+  return {
+    id: test.id,
+    projectInfo,
+    loadEntries,
+    createdAt: test.createdAt,
+    updatedAt: test.updatedAt,
+  };
+}
+
+/**
+ * Zustand store for managing pile test state with Supabase persistence.
+ * Why: Single source of truth for all app data that syncs with cloud database.
  */
 export const useTestStore = create<TestState & TestActions>()(
   persist(
@@ -107,6 +199,8 @@ export const useTestStore = create<TestState & TestActions>()(
       // Navigation
       setView: (view) => set({ view }),
       setCurrentStep: (step) => set({ currentStep: step }),
+      setError: (error) => set({ error }),
+      setLoading: (loading) => set({ isLoading: loading }),
 
       // Test management
       createNewTest: (testType) => {
@@ -118,31 +212,70 @@ export const useTestStore = create<TestState & TestActions>()(
             testType,
           },
           loadEntries: [],
+          supabaseProjectId: null,
+          supabaseTestId: null,
           currentStep: 'details',
           view: 'test',
         });
       },
 
-      openTest: (testId) => {
-        const test = get().allTests.find((t) => t.id === testId);
+      openTest: async (testId) => {
+        const { allTests } = get();
+        const test = allTests.find((t) => t.id === testId);
+        
         if (test) {
-          set({
-            currentTestId: testId,
-            projectInfo: test.projectInfo,
-            loadEntries: test.loadEntries,
-            currentStep: 'details',
-            view: 'test',
+          set({ isLoading: true });
+          try {
+            // Fetch fresh data from API
+            const apiTest = await api.fetchTest(testId);
+            const savedTest = apiTestToSavedTest(apiTest);
+            
+            set({
+              currentTestId: testId,
+              projectInfo: savedTest.projectInfo,
+              loadEntries: savedTest.loadEntries,
+              supabaseTestId: testId,
+              supabaseProjectId: apiTest.projectId,
+              currentStep: 'details',
+              view: 'test',
+              isLoading: false,
+            });
+          } catch (error) {
+            console.error('Failed to load test:', error);
+            // Fallback to cached data
+            set({
+              currentTestId: testId,
+              projectInfo: test.projectInfo,
+              loadEntries: test.loadEntries,
+              currentStep: 'details',
+              view: 'test',
+              isLoading: false,
+              error: 'Failed to load latest data. Showing cached version.',
+            });
+          }
+        }
+      },
+
+      deleteTest: async (testId) => {
+        set({ isLoading: true });
+        try {
+          await api.deleteTest(testId);
+          set((state) => ({
+            allTests: state.allTests.filter((t) => t.id !== testId),
+            isLoading: false,
+          }));
+        } catch (error) {
+          console.error('Failed to delete test:', error);
+          set({ 
+            isLoading: false,
+            error: 'Failed to delete test from server.',
           });
         }
       },
 
-      deleteTest: (testId) => {
-        set((state) => ({
-          allTests: state.allTests.filter((t) => t.id !== testId),
-        }));
-      },
-
       saveCurrentTest: () => {
+        // This is now a no-op for local state
+        // Real saving happens in saveTestToApi
         const { currentTestId, projectInfo, loadEntries, allTests } = get();
         if (!currentTestId) return;
 
@@ -163,17 +296,21 @@ export const useTestStore = create<TestState & TestActions>()(
       },
 
       backToHome: () => {
-        get().saveCurrentTest();
+        // Trigger API save before going back
+        get().saveTestToApi();
         set({
           view: 'home',
           currentTestId: null,
+          supabaseTestId: null,
+          supabaseProjectId: null,
         });
+        // Refresh tests from API
+        get().loadTestsFromApi();
       },
 
       // Project info
       setProjectInfo: (info) => {
         set({ projectInfo: info });
-        get().saveCurrentTest();
       },
 
       updateProjectField: (field, value) => {
@@ -183,14 +320,11 @@ export const useTestStore = create<TestState & TestActions>()(
             [field]: value,
           },
         }));
-        // Auto-save after a brief delay would be better, but for now save immediately
-        get().saveCurrentTest();
       },
 
       // Load entries
       setLoadEntries: (entries) => {
         set({ loadEntries: entries });
-        get().saveCurrentTest();
       },
 
       addLoadEntry: (entry, insertAtIndex) => {
@@ -203,19 +337,185 @@ export const useTestStore = create<TestState & TestActions>()(
           }
           return { loadEntries: entries };
         });
-        get().saveCurrentTest();
       },
 
-      deleteLoadEntry: (entryId) => {
+      deleteLoadEntry: async (entryId) => {
+        const { supabaseTestId, loadEntries } = get();
+        const entry = loadEntries.find((e) => e.id === entryId);
+        
+        // Delete all readings in this entry
+        if (entry && supabaseTestId) {
+          for (const reading of entry.readings) {
+            try {
+              await api.deleteReading(supabaseTestId, reading.id);
+            } catch (error) {
+              console.error('Failed to delete reading:', error);
+            }
+          }
+        }
+
         set((state) => ({
           loadEntries: state.loadEntries.filter((e) => e.id !== entryId),
         }));
-        get().saveCurrentTest();
       },
 
       // User profile
       setUserProfile: (profile) => set({ userProfile: profile }),
       setShowProfileModal: (show) => set({ showProfileModal: show }),
+
+      // API Operations
+      loadTestsFromApi: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const tests = await api.fetchTests();
+          const savedTests: SavedTest[] = tests.map((test) => apiTestToSavedTest(test));
+          set({ allTests: savedTests, isLoading: false });
+        } catch (error) {
+          console.error('Failed to load tests from API:', error);
+          set({ 
+            isLoading: false, 
+            error: 'Failed to load tests. Check your connection.' 
+          });
+        }
+      },
+
+      saveTestToApi: async () => {
+        const { 
+          projectInfo, 
+          supabaseTestId, 
+          supabaseProjectId,
+          currentTestId,
+        } = get();
+
+        // Skip if no project info filled
+        if (!projectInfo.project || !projectInfo.pileId) {
+          return;
+        }
+
+        set({ isLoading: true, error: null });
+
+        try {
+          let projectId = supabaseProjectId;
+          let testId = supabaseTestId;
+
+          // Create project if needed
+          if (!projectId) {
+            const project = await api.createProject({
+              name: projectInfo.project,
+              client: projectInfo.client,
+              contractor: projectInfo.contractor,
+              pmc: projectInfo.pmc || undefined,
+              location: projectInfo.location,
+            });
+            projectId = project.id;
+            set({ supabaseProjectId: projectId });
+          }
+
+          // Create or update test
+          if (!testId) {
+            const test = await api.createTest({
+              projectId: projectId!,
+              testType: projectInfo.testType || 'IVPLT',
+              reportNo: projectInfo.reportNo || undefined,
+              testDate: projectInfo.testDate || undefined,
+              pileId: projectInfo.pileId,
+              pileDiameterMm: parseFloat(projectInfo.pileDiameter) || 600,
+              pileDepthM: parseFloat(projectInfo.pileDepth) || 10,
+              concreteGrade: projectInfo.mixedDesign || 'M25',
+              designLoadT: parseFloat(projectInfo.designLoadOnPile) || 0,
+              jackName: projectInfo.jackName || undefined,
+              ramAreaCm2: parseFloat(projectInfo.ramArea) || 71.26,
+              gaugeLeastCountMm: parseFloat(projectInfo.lcOfDialGauge) || 0.01,
+            });
+            testId = test.id;
+            
+            // Update local state with new Supabase ID
+            set((state) => ({
+              supabaseTestId: testId,
+              currentTestId: testId,
+              allTests: state.allTests.map((t) =>
+                t.id === currentTestId ? { ...t, id: testId! } : t
+              ),
+            }));
+          } else {
+            // Update existing test
+            await api.updateTest(testId, {
+              reportNo: projectInfo.reportNo || null,
+              testDate: projectInfo.testDate || undefined,
+              pileId: projectInfo.pileId,
+              pileDiameterMm: parseFloat(projectInfo.pileDiameter) || 600,
+              pileDepthM: parseFloat(projectInfo.pileDepth) || 10,
+              concreteGrade: projectInfo.mixedDesign || 'M25',
+              designLoadT: parseFloat(projectInfo.designLoadOnPile) || 0,
+              jackName: projectInfo.jackName || null,
+              ramAreaCm2: parseFloat(projectInfo.ramArea) || 71.26,
+              gaugeLeastCountMm: parseFloat(projectInfo.lcOfDialGauge) || 0.01,
+            });
+          }
+
+          set({ isLoading: false });
+        } catch (error) {
+          console.error('Failed to save test to API:', error);
+          set({ 
+            isLoading: false, 
+            error: 'Failed to save to server. Changes saved locally.' 
+          });
+        }
+      },
+
+      addReadingToApi: async (reading: LegacyReading) => {
+        const { supabaseTestId } = get();
+        
+        if (!supabaseTestId) {
+          // Save test first
+          await get().saveTestToApi();
+        }
+
+        const testId = get().supabaseTestId;
+        if (!testId) {
+          throw new Error('No test ID available');
+        }
+
+        const phaseMap: Record<LegacyTestPhase, string> = {
+          loading: 'LOADING',
+          holding: 'HOLD',
+          unloading: 'UNLOADING',
+        };
+
+        const apiReading = await api.createReading(testId, {
+          phase: phaseMap[reading.phase] as api.ApiReading['phase'],
+          recordedAt: reading.timestamp,
+          pressureKgCm2: parseFloat(reading.pressureGauge),
+          dg1: parseFloat(reading.dialGauge1) || 0,
+          dg2: parseFloat(reading.dialGauge2) || 0,
+          dg3: parseFloat(reading.dialGauge3) || 0,
+          dg4: parseFloat(reading.dialGauge4) || 0,
+          dg1Enabled: reading.dg1Enabled ?? true,
+          dg2Enabled: reading.dg2Enabled ?? true,
+          dg3Enabled: reading.dg3Enabled ?? true,
+          dg4Enabled: reading.dg4Enabled ?? true,
+          remark: reading.remark || undefined,
+        });
+
+        // Update the reading ID in local state with API ID
+        set((state) => ({
+          loadEntries: state.loadEntries.map((entry) => ({
+            ...entry,
+            readings: entry.readings.map((r) =>
+              r.id === reading.id ? { ...r, id: apiReading.id } : r
+            ),
+          })),
+        }));
+
+        return apiReading;
+      },
+
+      deleteReadingFromApi: async (readingId: string) => {
+        const { supabaseTestId } = get();
+        if (!supabaseTestId) return;
+
+        await api.deleteReading(supabaseTestId, readingId);
+      },
 
       // Helpers
       getTestSummaries: (): PileTestSummary[] => {
@@ -241,7 +541,7 @@ export const useTestStore = create<TestState & TestActions>()(
     }),
     {
       name: 'pile-test-storage',
-      // Only persist these fields
+      // Only persist these fields as cache
       partialize: (state) => ({
         allTests: state.allTests,
         userProfile: state.userProfile,
@@ -259,8 +559,9 @@ export const useCurrentTest = () => {
   const loadEntries = useTestStore((s) => s.loadEntries);
   const currentStep = useTestStore((s) => s.currentStep);
   const setCurrentStep = useTestStore((s) => s.setCurrentStep);
+  const supabaseTestId = useTestStore((s) => s.supabaseTestId);
 
-  return { projectInfo, loadEntries, currentStep, setCurrentStep };
+  return { projectInfo, loadEntries, currentStep, setCurrentStep, supabaseTestId };
 };
 
 /**
@@ -274,4 +575,28 @@ export const useNavigation = () => {
   const openTest = useTestStore((s) => s.openTest);
 
   return { view, backToHome, createNewTest, openTest };
+};
+
+/**
+ * Hook for API operations.
+ * Why: Expose API sync methods for components.
+ */
+export const useApiSync = () => {
+  const loadTestsFromApi = useTestStore((s) => s.loadTestsFromApi);
+  const saveTestToApi = useTestStore((s) => s.saveTestToApi);
+  const addReadingToApi = useTestStore((s) => s.addReadingToApi);
+  const deleteReadingFromApi = useTestStore((s) => s.deleteReadingFromApi);
+  const isLoading = useTestStore((s) => s.isLoading);
+  const error = useTestStore((s) => s.error);
+  const setError = useTestStore((s) => s.setError);
+
+  return { 
+    loadTestsFromApi, 
+    saveTestToApi, 
+    addReadingToApi, 
+    deleteReadingFromApi,
+    isLoading, 
+    error,
+    setError,
+  };
 };

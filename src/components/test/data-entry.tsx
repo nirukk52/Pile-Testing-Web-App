@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, Fragment } from 'react';
-import { Plus, Trash2, Pencil } from 'lucide-react';
+import { Plus, Trash2, Pencil, Loader2, Cloud, CloudOff } from 'lucide-react';
 import { AddReadingPage, type NewReadingData } from './add-reading-page';
 import type { LoadEntry, LegacyReading, LegacyProjectInfo, LegacyTestPhase } from '@/types';
 import { calculateLoad, calculateAverageSettlement } from '@/types';
+import { useApiSync } from '@/store/test-store';
 
 /**
  * Props for the DataEntry component.
@@ -39,13 +40,18 @@ export function DataEntry({
 }: DataEntryProps) {
   const [showAddReading, setShowAddReading] = useState(false);
   const [insertAtIndex, setInsertAtIndex] = useState<number | undefined>(undefined);
+  const [isSaving, setIsSaving] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
+  
+  const { addReadingToApi, deleteReadingFromApi, saveTestToApi } = useApiSync();
 
-  const handleSaveReading = (data: NewReadingData) => {
+  const handleSaveReading = async (data: NewReadingData) => {
     const timestamp = new Date(`${data.date}T${data.time}`).toISOString();
     const load = calculateLoad(data.pressure, projectInfo.ramArea);
+    const tempId = Date.now().toString();
 
     const newReading: LegacyReading = {
-      id: Date.now().toString(),
+      id: tempId,
       pressureGauge: data.pressure,
       load,
       dialGauge1: data.dialGauge1,
@@ -63,21 +69,47 @@ export function DataEntry({
     };
 
     const newEntry: LoadEntry = {
-      id: Date.now().toString(),
+      id: `entry-${tempId}`,
       pressureGauge: data.pressure,
       load,
       readings: [newReading],
       timestamp,
     };
 
+    // Add to local state immediately for optimistic update
     onAddEntry(newEntry, insertAtIndex);
     setShowAddReading(false);
     setInsertAtIndex(undefined);
+
+    // Sync to API in background
+    setIsSaving(true);
+    setSyncStatus('syncing');
+    try {
+      // Ensure test is saved first
+      await saveTestToApi();
+      // Then save the reading
+      await addReadingToApi(newReading);
+      setSyncStatus('synced');
+      // Auto-hide sync status after 2 seconds
+      setTimeout(() => setSyncStatus('idle'), 2000);
+    } catch (error) {
+      console.error('Failed to sync reading to API:', error);
+      setSyncStatus('error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDeleteReading = (entryId: string) => {
+  const handleDeleteReading = async (entryId: string, readingId: string) => {
     if (confirm('Delete this reading?')) {
       onDeleteEntry(entryId);
+      
+      // Delete from API
+      try {
+        await deleteReadingFromApi(readingId);
+      } catch (error) {
+        console.error('Failed to delete from API:', error);
+      }
     }
   };
 
@@ -110,6 +142,24 @@ export function DataEntry({
 
   return (
     <div className="p-2 space-y-3">
+      {/* Sync Status */}
+      {syncStatus !== 'idle' && (
+        <div className={`rounded-lg px-3 py-2 flex items-center gap-2 text-sm ${
+          syncStatus === 'syncing' ? 'bg-blue-50 text-blue-700' :
+          syncStatus === 'synced' ? 'bg-green-50 text-green-700' :
+          'bg-red-50 text-red-700'
+        }`}>
+          {syncStatus === 'syncing' && <Loader2 className="w-4 h-4 animate-spin" />}
+          {syncStatus === 'synced' && <Cloud className="w-4 h-4" />}
+          {syncStatus === 'error' && <CloudOff className="w-4 h-4" />}
+          <span>
+            {syncStatus === 'syncing' && 'Saving to cloud...'}
+            {syncStatus === 'synced' && 'Saved to cloud ✓'}
+            {syncStatus === 'error' && 'Failed to save to cloud. Data saved locally.'}
+          </span>
+        </div>
+      )}
+
       {/* Readings Table */}
       {loadEntries.length > 0 ? (
         <div className="bg-white rounded-lg shadow-sm overflow-hidden border border-slate-300">
@@ -281,7 +331,7 @@ export function DataEntry({
                         </td>
                         <td className="px-2 py-2 text-center">
                           <button
-                            onClick={() => handleDeleteReading(entry.id)}
+                            onClick={() => handleDeleteReading(entry.id, reading.id)}
                             className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
                           >
                             <Trash2 className="w-3 h-3" />
