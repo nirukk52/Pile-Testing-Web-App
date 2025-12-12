@@ -155,7 +155,7 @@ export function DataEntry({
           <span>
             {syncStatus === 'syncing' && 'Saving to cloud...'}
             {syncStatus === 'synced' && 'Saved to cloud ✓'}
-            {syncStatus === 'error' && 'Failed to save to cloud. Data saved locally.'}
+            {syncStatus === 'error' && 'Failed to save. Please try again.'}
           </span>
         </div>
       )}

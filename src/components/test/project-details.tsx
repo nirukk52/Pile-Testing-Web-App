@@ -365,7 +365,7 @@ export function ProjectDetails({
           <span>
             {saveStatus === 'saving' && 'Saving to cloud...'}
             {saveStatus === 'saved' && 'Saved to cloud'}
-            {saveStatus === 'error' && 'Failed to save to cloud. Data saved locally.'}
+            {saveStatus === 'error' && 'Failed to save. Please check connection and try again.'}
           </span>
         </div>
       )}
