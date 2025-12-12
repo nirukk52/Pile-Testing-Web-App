@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import '@/styles/globals.css';
 
 export const metadata: Metadata = {
-  title: 'PileTest Pro | Upload Field Readings',
-  description: 'Transform handwritten pile load test readings into professional IS 2911-compliant reports',
+  title: 'PileTest Pro | Pile Load Testing',
+  description: 'Mobile-first pile load test data entry and IS 2911-compliant report generation',
 };
 
 /**
@@ -22,6 +22,7 @@ export default function RootLayout({
     </html>
   );
 }
+
 
 
 

@@ -1,221 +1,239 @@
 /**
  * Supported pile load test types per IS 2911.
  * Why: Different test types have different load calculations and pass criteria.
- * The code is used for report generation and data validation.
  */
-export type TestType = 'IVPLT' | 'RVPLT' | 'PULLOUT' | 'LATERAL';
+export type TestType = 'IVPLT' | 'RVPLT' | 'Lateral' | 'Uplift';
 
 /**
  * Configuration for each test type displayed in the UI.
- * Why: Provides human-readable labels and descriptions for test type selection,
- * helping field engineers choose the correct test type for their data.
+ * Why: Provides human-readable labels and descriptions for test type selection.
  */
 export interface TestTypeConfig {
-  code: TestType;
+  id: TestType;
   name: string;
+  fullName: string;
   description: string;
-  loadMultiplier: string;
+  loadMultiplier: number;
+  color: string;
+  hoverColor: string;
 }
 
 /**
  * Available test types with their configurations.
- * Why: Centralized source of truth for test type metadata used across
- * the upload screen and report generation.
+ * Why: Centralized source of truth for test type metadata.
  */
 export const TEST_TYPES: TestTypeConfig[] = [
   {
-    code: 'IVPLT',
-    name: 'Initial Vertical',
-    description: 'Initial Static Vertical Pile Load Test',
-    loadMultiplier: '2.5x Design Load',
+    id: 'IVPLT',
+    name: 'IVPLT',
+    fullName: 'Initial Vertical Load Test',
+    description: 'First-time load testing of new piles',
+    loadMultiplier: 2.5,
+    color: 'bg-blue-600',
+    hoverColor: 'hover:bg-blue-700',
   },
   {
-    code: 'RVPLT',
-    name: 'Routine Vertical',
-    description: 'Routine Static Vertical Pile Load Test',
-    loadMultiplier: '1.5x Design Load',
+    id: 'RVPLT',
+    name: 'RVPLT',
+    fullName: 'Routine Vertical Load Test',
+    description: 'Standard vertical load testing',
+    loadMultiplier: 1.5,
+    color: 'bg-green-600',
+    hoverColor: 'hover:bg-green-700',
   },
   {
-    code: 'PULLOUT',
-    name: 'Pullout Test',
-    description: 'Pile Pullout / Uplift Load Test',
-    loadMultiplier: '2.5x Design Load',
+    id: 'Lateral',
+    name: 'Lateral Load Test',
+    fullName: 'Lateral Load Test',
+    description: 'Horizontal load testing',
+    loadMultiplier: 2.5,
+    color: 'bg-orange-600',
+    hoverColor: 'hover:bg-orange-700',
   },
   {
-    code: 'LATERAL',
-    name: 'Lateral Test',
-    description: 'Lateral Load Test on Pile',
-    loadMultiplier: '2.5x Design Load',
+    id: 'Uplift',
+    name: 'Uplift / Pullout Load Test',
+    fullName: 'Uplift / Pullout Load Test',
+    description: 'Testing upward resistance',
+    loadMultiplier: 2.5,
+    color: 'bg-purple-600',
+    hoverColor: 'hover:bg-purple-700',
   },
 ];
 
-/**
- * Represents an uploaded file with preview capabilities.
- * Why: Stores both the file object and generated preview URL
- * for displaying thumbnails of uploaded images/PDFs.
- */
-export interface UploadedFile {
-  file: File;
-  preview: string;
-  id: string;
-}
-
 // ============================================
-// OCR EXTRACTION TYPES
+// PROJECT & TEST DATA TYPES
 // ============================================
 
 /**
- * A single extracted value with its OCR confidence score.
- * Why: Allows the verify UI to highlight low-confidence values (red background)
- * so engineers know which values need manual verification.
- */
-export interface OCRValue<T = string | number | null> {
-  value: T;
-  confidence: number;
-}
-
-/**
- * A single row of readings extracted from the field sheet.
- * Why: Represents one time-stamped measurement with pressure and 4 dial gauge readings.
- * The `id` is used for React keys and tracking edits.
- */
-export interface ExtractedReading {
-  id: string;
-  date: OCRValue<string | null>;
-  time: OCRValue<string | null>;
-  pressure: OCRValue<number | null>;
-  gauge1: OCRValue<number | null>;
-  gauge2: OCRValue<number | null>;
-  gauge3: OCRValue<number | null>;
-  gauge4: OCRValue<number | null>;
-  remark: OCRValue<string | null>;
-  /** 
-   * Cycle phase detected from load progression.
-   * Why: Auto-detect cycle changes checkbox uses this to show loading/unloading phases.
-   */
-  cycle?: 'loading' | 'unloading' | 'holding';
-}
-
-/**
- * Project/header information extracted from field sheet.
- * Why: Contains all the metadata needed to identify the pile test
- * and generate compliant reports (test number, location, pile specs, etc.).
+ * Project and test specification information.
+ * Why: Contains all metadata needed to identify the pile test
+ * and generate compliant reports.
  */
 export interface ProjectInfo {
-  testNo: OCRValue<string | null>;
-  project: OCRValue<string | null>;
-  location: OCRValue<string | null>;
-  contractor: OCRValue<string | null>;
-  clientName: OCRValue<string | null>;
-  pileDiameter: OCRValue<string | null>;
-  designLoad: OCRValue<string | null>;
-  testLoad: OCRValue<string | null>;
-  ramArea: OCRValue<string | null>;
-  dateOfCasting: OCRValue<string | null>;
-  pileDepth: OCRValue<string | null>;
-  lcDialGauge: OCRValue<string | null>;
-  testType: OCRValue<string | null>;
-  mixedDesign: OCRValue<string | null>;
-}
-
-/**
- * Full response from the OCR extraction API.
- * Why: Bundles all extracted data with metadata about the extraction process.
- */
-export interface OCRResponse {
-  projectInfo: ProjectInfo;
-  readings: ExtractedReading[];
-  pageCount: number;
-  totalReadings: number;
-}
-
-/**
- * Confidence thresholds for visual highlighting.
- * Why: Centralized thresholds for consistent UI feedback across components.
- */
-export const CONFIDENCE_THRESHOLDS = {
-  /** Below this = red background (needs attention) */
-  LOW: 0.75,
-  /** Below this = yellow background (verify) */
-  MEDIUM: 0.85,
-} as const;
-
-/**
- * Helper to determine confidence level for a value.
- * Why: Consistent logic for applying visual styles based on OCR confidence.
- */
-export function getConfidenceLevel(confidence: number): 'low' | 'medium' | 'high' {
-  if (confidence < CONFIDENCE_THRESHOLDS.LOW) return 'low';
-  if (confidence < CONFIDENCE_THRESHOLDS.MEDIUM) return 'medium';
-  return 'high';
-}
-
-// ============================================
-// REPORT STATE TYPES
-// ============================================
-
-/**
- * Current step in the report generation workflow.
- * Why: Tracks user progress through upload → verify → report screens.
- */
-export type WorkflowStep = 'upload' | 'verify' | 'report';
-
-/**
- * Complete state for a pile test report in progress.
- * Why: Single source of truth for all data as it flows through the workflow.
- */
-export interface ReportState {
-  /** Files uploaded by the user */
-  uploadedFiles: UploadedFile[];
-  /** Selected test type */
+  reportNo: string;
+  project: string;
+  location: string;
+  contractor: string;
+  client: string;
+  lcOfDialGauge: string;
+  designLoadOnPile: string;
+  mixedDesign: string;
+  pileDiameter: string;
+  ramArea: string;
+  dateOfCasting: string;
+  pileDepth: string;
   testType: TestType | null;
-  /** OCR-extracted project info (editable) */
-  projectInfo: ProjectInfo | null;
-  /** OCR-extracted readings (editable) */
-  readings: ExtractedReading[];
-  /** Whether auto-detect cycle changes is enabled */
-  autoDetectCycles: boolean;
-  /** Current workflow step */
-  currentStep: WorkflowStep;
-  /** Loading state for async operations */
-  isLoading: boolean;
-  /** Error message if something went wrong */
-  error: string | null;
 }
 
 /**
  * Default empty project info for initialization.
- * Why: Provides type-safe defaults when creating new reports.
+ * Why: Provides type-safe defaults when creating new tests.
  */
 export const EMPTY_PROJECT_INFO: ProjectInfo = {
-  testNo: { value: null, confidence: 0 },
-  project: { value: null, confidence: 0 },
-  location: { value: null, confidence: 0 },
-  contractor: { value: null, confidence: 0 },
-  clientName: { value: null, confidence: 0 },
-  pileDiameter: { value: null, confidence: 0 },
-  designLoad: { value: null, confidence: 0 },
-  testLoad: { value: null, confidence: 0 },
-  ramArea: { value: null, confidence: 0 },
-  dateOfCasting: { value: null, confidence: 0 },
-  pileDepth: { value: null, confidence: 0 },
-  lcDialGauge: { value: null, confidence: 0 },
-  testType: { value: null, confidence: 0 },
-  mixedDesign: { value: null, confidence: 0 },
+  reportNo: '',
+  project: '',
+  location: '',
+  contractor: '',
+  client: '',
+  lcOfDialGauge: '0.01',
+  designLoadOnPile: '',
+  mixedDesign: '',
+  pileDiameter: '',
+  ramArea: '',
+  dateOfCasting: '',
+  pileDepth: '',
+  testType: null,
 };
 
+/**
+ * Test phase during pile load testing.
+ * Why: Tracks whether load is being increased, held, or decreased.
+ */
+export type TestPhase = 'loading' | 'holding' | 'unloading';
+
+/**
+ * A single reading captured during the pile load test.
+ * Why: Represents one time-stamped measurement with pressure and dial gauge readings.
+ */
+export interface Reading {
+  id: string;
+  pressureGauge: string;
+  load: string;
+  dialGauge1: string;
+  dialGauge2: string;
+  dialGauge3: string;
+  dialGauge4: string;
+  timestamp: string;
+  signature?: string;
+  remark?: string;
+  phase: TestPhase;
+}
+
+/**
+ * A load entry containing readings at a specific pressure level.
+ * Why: Groups readings by load increment for timeline display.
+ */
+export interface LoadEntry {
+  id: string;
+  pressureGauge: string;
+  load: string;
+  readings: Reading[];
+  timestamp: string;
+}
+
+/**
+ * User profile information for signatures.
+ * Why: Stores engineer's identity for signing off readings.
+ */
+export interface UserProfile {
+  name: string;
+  initials: string;
+  signature: string;
+}
+
+/**
+ * A complete saved pile test.
+ * Why: Represents a full test with all data for persistence.
+ */
+export interface SavedTest {
+  id: string;
+  projectInfo: ProjectInfo;
+  loadEntries: LoadEntry[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Summary info for displaying in test list.
+ * Why: Lightweight representation for the home screen test cards.
+ */
+export interface PileTestSummary {
+  id: string;
+  reportNo: string;
+  project: string;
+  location: string;
+  dateOfCasting: string;
+  createdAt: string;
+  readingsCount: number;
+  testType: TestType | null;
+}
+
 // ============================================
-// RE-EXPORT CALCULATION TYPES
+// WORKFLOW TYPES
 // ============================================
 
 /**
- * Re-export calculation types for convenient imports.
- * Why: Allows components to import all types from '@/types'
- * without needing to know about the calculations library structure.
+ * Current step in the test workflow.
+ * Why: Tracks user progress through details → entry → report screens.
  */
-export type {
-  CalculatedReading,
-  ReportSummary,
-  ReportData,
-  CalculationInput,
-} from '@/lib/calculations/types';
+export type WorkflowStep = 'details' | 'entry' | 'report';
+
+/**
+ * Current view in the app.
+ * Why: Tracks whether user is on home screen or inside a test.
+ */
+export type AppView = 'home' | 'test';
+
+// ============================================
+// CALCULATION HELPERS
+// ============================================
+
+/**
+ * Calculate load from pressure gauge reading and ram area.
+ * Why: Core formula for converting pressure to load (MT).
+ */
+export function calculateLoad(pressure: string, ramArea: string): string {
+  const pressureValue = parseFloat(pressure);
+  const ramAreaValue = parseFloat(ramArea);
+  if (ramAreaValue && pressureValue) {
+    return ((pressureValue * ramAreaValue) / 1000).toFixed(2);
+  }
+  return '-';
+}
+
+/**
+ * Calculate average settlement from 4 dial gauge readings.
+ * Why: Standard calculation for average pile settlement.
+ */
+export function calculateAverageSettlement(
+  g1: string,
+  g2: string,
+  g3: string,
+  g4: string
+): string {
+  const values = [g1, g2, g3, g4]
+    .map((g) => parseFloat(g))
+    .filter((v) => !isNaN(v) && v !== 0);
+
+  if (values.length > 0) {
+    return (values.reduce((a, b) => a + b, 0) / values.length).toFixed(2);
+  }
+  return '-';
+}
+
+/**
+ * IS 2911 settlement limit for vertical tests.
+ * Why: Pass/fail criteria - net settlement must be ≤ 12mm.
+ */
+export const SETTLEMENT_LIMIT_MM = 12;
