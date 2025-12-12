@@ -694,8 +694,9 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
       </div>
 
       {/* Conclusion Section */}
-      {testId && (
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
+        {testId ? (
+          <>
           <div className="flex justify-between items-center mb-4">
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-slate-800">4.0 Results & Conclusion</h3>
@@ -792,8 +793,24 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
               </p>
             </div>
           )}
-        </div>
-      )}
+          </>
+        ) : (
+          /* No testId - show message about needing to save test */
+          <>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-slate-800">4.0 Results & Conclusion</h3>
+            </div>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
+              <AlertCircle className="w-10 h-10 text-amber-400 mx-auto mb-3" />
+              <p className="text-amber-700 font-medium mb-2">Test not saved to database</p>
+              <p className="text-amber-600 text-sm">
+                AI conclusion generation requires the test to be saved to the database.
+                This feature is available for database-backed tests.
+              </p>
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Data Table */}
       <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
