@@ -1,6 +1,6 @@
 # PileTest Pro
 
-> Transform handwritten pile load test readings into professional engineering reports in minutes.
+> Mobile-first pile load test data entry and IS 2911-compliant report generation.
 
 ---
 
@@ -10,7 +10,7 @@ The current pile load testing workflow is **manual, slow, and error-prone**:
 
 | Pain Point | Impact |
 |------------|--------|
-| Handwritten field readings | Transcription errors, lost data |
+| Handwritten field readings | Difficult to track, no backup |
 | Excel-based calculations | Formula mistakes, no audit trail |
 | Manual graph plotting | Inconsistent, time-consuming |
 | Word/PDF report assembly | Hours of copy-paste work |
@@ -20,63 +20,65 @@ The current pile load testing workflow is **manual, slow, and error-prone**:
 
 ---
 
-## Solution
+## Solution (MVP)
 
-A **3-screen web app** that digitizes the entire workflow:
+A **mobile-first web app** for site engineers to enter readings directly and generate professional reports:
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   📤 UPLOAD     │ ──▶ │   ✅ VERIFY     │ ──▶ │   📊 REPORT     │
-│                 │     │                 │     │                 │
-│ Raw field photos│     │ OCR extraction  │     │ Interactive     │
-│ Handwritten PDFs│     │ correction UI   │     │ dashboard +     │
-│                 │     │                 │     │ PDF export      │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   🏠 HOME       │ ──▶ │   📋 DETAILS    │ ──▶ │   ✏️ DATA ENTRY │ ──▶ │   📊 REPORT     │
+│                 │     │                 │     │                 │     │                 │
+│ Test list       │     │ Project info    │     │ Add readings    │     │ KPIs, chart,    │
+│ + New Test      │     │ Pile specs      │     │ Timeline view   │     │ PDF export      │
+└─────────────────┘     └─────────────────┘     └─────────────────┘     └─────────────────┘
 ```
+
+**Key Change**: Manual data entry instead of OCR. Engineers enter readings directly on-site using their mobile devices. OCR workflow is archived for future use.
 
 ---
 
 ## Screens
 
-### Screen 1: Upload
-**Purpose**: Start a new report and upload raw site data
+### Screen 1: Home
+**Purpose**: View all tests and start new ones
 
-- Create new report with basic metadata (Project, Test ID, Location, Date)
-- Select test type:
-  - **IVPLT** - Initial Vertical Pile Load Test
-  - **RVPLT** - Routine Vertical Pile Load Test  
-  - **Pullout** - Pullout Load Test
-  - **Lateral** - Lateral Load Test
-- Upload sources:
-  - Photos of handwritten field sheets
-  - Scanned PDFs of manual readings
-  - Camera capture (mobile)
-- Drag-and-drop or file picker interface
+- List of recent pile tests with metadata
+- "Start New Pile Test" button
+- Test type selection modal (IVPLT, RVPLT, Lateral, Uplift)
+- User profile for signatures
 
-### Screen 2: Verify OCR
-**Purpose**: Review and correct OCR-extracted data before report generation
+### Screen 2: Details (Tab 1)
+**Purpose**: Enter project info and pile specifications
 
-- Side-by-side view: original image ↔ extracted data
-- Editable table for:
-  - Load increments (kg/cm² pressure → MT load)
-  - Dial gauge readings (4 gauges typically)
-  - Time stamps
-  - Cycle phases (Loading/Unloading)
-- Highlight low-confidence OCR fields in yellow
-- Add/remove rows
-- Pile specification inputs (diameter, depth, concrete grade, etc.)
+- **Project Information**: Report No, Project Name, Location, Contractor, Client
+- **Test Specifications**: LC of Dial Gauge, Design Load, Mixed Design, Pile Diameter, Ram Area, Date of Casting, Pile Depth
+- Auto-save to localStorage
 
-### Screen 3: Report Dashboard
+### Screen 3: Data Entry (Tab 2)
+**Purpose**: Record load test readings in real-time
+
+- **Timeline Table View**: All readings with phase headers (Loading/Holding/Unloading)
+- **Add Reading Page**: Full-screen form for each reading
+  - Date & Time (auto-filled)
+  - Pressure gauge reading (kg/cm²)
+  - 4 dial gauge readings (mm)
+  - Phase selection (Loading/Holding/Unloading)
+  - Remark (optional)
+  - Signature confirmation
+- **Auto-calculations**: Load (MT) from pressure, Average settlement from gauges
+- Insert readings between existing entries
+- Edit/Delete existing readings
+
+### Screen 4: Report (Tab 3)
 **Purpose**: View the final professional report and export
 
 **Components:**
-- **Header**: Report ID, Project, Location, Date, Test Type
+- **Header**: Test Type, Report ID, Location, Date
 - **KPI Cards**: Test Load, Max Settlement, Net Settlement, Pass/Fail Status
-- **Interactive Chart**: Load vs. Settlement curve (loading + unloading phases)
+- **Interactive Chart**: Load vs. Settlement curve
 - **Specifications Panel**: Pile diameter, depth, grade, method, ram area
 - **Data Table**: Complete load increment summary
-- **Attachments Section**: Add site photos, calibration certs, notes
-- **Export**: Download as PDF
+- **Export**: Print/Download as PDF
 
 ---
 
@@ -86,60 +88,58 @@ A **3-screen web app** that digitizes the entire workflow:
 |-----------|------|----------|-------------|
 | Initial Vertical | IVPLT | IS 2911 Part 4 | Settlement at 2.5x design load |
 | Routine Vertical | RVPLT | IS 2911 Part 4 | Settlement at 1.5x design load |
-| Pullout | - | IS 2911 Part 4 | Uplift displacement |
-| Lateral | - | IS 2911 Part 4 | Lateral deflection |
+| Lateral | Lateral | IS 2911 Part 4 | Lateral deflection |
+| Uplift / Pullout | Uplift | IS 2911 Part 4 | Uplift displacement |
 
 ---
 
 ## Data Model
 
 ```typescript
-interface PileTestReport {
-  // Metadata
-  id: string;
-  projectName: string;
-  testId: string;           // e.g., "TP-04"
+interface ProjectInfo {
+  reportNo: string;
+  project: string;
   location: string;
-  testDate: Date;
-  testType: 'IVPLT' | 'RVPLT' | 'PULLOUT' | 'LATERAL';
-  
-  // Pile Specifications
-  pileSpecs: {
-    diameter: number;       // mm
-    depth: number;          // meters
-    concreteGrade: string;  // e.g., "M-25"
-    designLoad: number;     // MT
-    testLoad: number;       // MT (typically 1.5x or 2.5x design)
-    ramArea: number;        // cm²
-  };
-  
-  // Test Readings (OCR extracted)
-  readings: LoadReading[];
-  
-  // Calculated Results
-  results: {
-    maxSettlement: number;  // mm
-    netSettlement: number;  // mm
-    safeLoad: number;       // MT
-    status: 'PASS' | 'FAIL';
-  };
-  
-  // Attachments
-  attachments: {
-    sourceImages: File[];
-    sitePhotos: File[];
-    notes: string;
-  };
+  contractor: string;
+  client: string;
+  lcOfDialGauge: string;
+  designLoadOnPile: string;
+  mixedDesign: string;
+  pileDiameter: string;
+  ramArea: string;
+  dateOfCasting: string;
+  pileDepth: string;
+  testType: 'IVPLT' | 'RVPLT' | 'Lateral' | 'Uplift' | null;
 }
 
-interface LoadReading {
-  cycle: 'LOADING' | 'UNLOADING' | 'HOLD';
-  pressure: number;         // kg/cm²
-  load: number;             // MT (calculated from pressure × ram area)
-  gaugeReadings: number[];  // 4 dial gauge readings in mm
-  avgSettlement: number;    // mm (calculated average)
-  timestamp: Date;
-  remarks?: string;
+interface Reading {
+  id: string;
+  pressureGauge: string;
+  load: string;                    // Calculated: pressure × ramArea / 1000
+  dialGauge1: string;
+  dialGauge2: string;
+  dialGauge3: string;
+  dialGauge4: string;
+  timestamp: string;
+  signature?: string;
+  remark?: string;
+  phase: 'loading' | 'holding' | 'unloading';
+}
+
+interface LoadEntry {
+  id: string;
+  pressureGauge: string;
+  load: string;
+  readings: Reading[];
+  timestamp: string;
+}
+
+interface SavedTest {
+  id: string;
+  projectInfo: ProjectInfo;
+  loadEntries: LoadEntry[];
+  createdAt: string;
+  updatedAt: string;
 }
 ```
 
@@ -150,14 +150,13 @@ interface LoadReading {
 | Layer | Technology | Why |
 |-------|------------|-----|
 | Framework | Next.js 14 (App Router) | React framework with file-based routing |
-| Styling | Tailwind CSS + shadcn/ui | Utility CSS + accessible components |
-| Charts | Chart.js + react-chartjs-2 | Simple, performant, matches reference |
-| OCR | [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) | 65k+ stars, excellent handwriting recognition |
-| PDF Export | [Playwright](https://playwright.dev/) | Full-fidelity HTML→PDF rendering |
-| State | Zustand | Lightweight, perfect for in-memory |
-| Forms | React Hook Form + Zod | Validation and form handling |
+| Language | TypeScript | Type safety throughout |
+| Styling | Tailwind CSS | Utility-first CSS, mobile-first |
+| Charts | Chart.js + react-chartjs-2 | Simple, performant Load vs Settlement curves |
+| State | Zustand + localStorage | Lightweight state with persistence |
+| Icons | Lucide React | Consistent icon set |
 
-**Minimal backend** - OCR and PDF generation run via Next.js API routes.
+**No backend required** - All data stored in localStorage for MVP.
 
 ---
 
@@ -173,13 +172,8 @@ Load (MT) = Pressure (kg/cm²) × Ram Area (cm²) / 1000
 Avg Settlement = (Gauge1 + Gauge2 + Gauge3 + Gauge4) / 4
 ```
 
-### Net Settlement
-```
-Net Settlement = Final Settlement (after full unload) - Initial Reading
-```
-
 ### Pass/Fail Criteria (IS 2911)
-- **Vertical Tests**: Net settlement ≤ 12mm at 2.5x design load → PASS
+- **Vertical Tests**: Net settlement ≤ 12mm at test load → PASS
 - **Lateral Tests**: Deflection within limits per IS code → PASS
 
 ---
@@ -189,40 +183,40 @@ Net Settlement = Final Settlement (after full unload) - Initial Reading
 ```
 src/
 ├── app/
-│   ├── layout.tsx            # Root layout with providers
-│   ├── page.tsx              # Upload screen (Screen 1)
-│   ├── verify/
-│   │   └── page.tsx          # OCR verification (Screen 2)
-│   ├── report/
-│   │   └── page.tsx          # Report dashboard (Screen 3)
-│   └── api/
-│       ├── ocr/route.ts      # PaddleOCR endpoint
-│       └── pdf/route.ts      # Playwright PDF endpoint
+│   ├── layout.tsx              # Root layout
+│   ├── page.tsx                # Home screen
+│   └── test/
+│       └── page.tsx            # Test workspace (tabs: Details/Entry/Report)
+│
 ├── components/
-│   ├── ui/                   # shadcn/ui components
-│   ├── upload/
-│   │   ├── dropzone.tsx
-│   │   ├── test-type-select.tsx
-│   │   └── metadata-form.tsx
-│   ├── verify/
-│   │   ├── image-preview.tsx
-│   │   ├── readings-table.tsx
-│   │   └── specs-form.tsx
-│   └── report/
-│       ├── kpi-cards.tsx
-│       ├── load-settlement-chart.tsx
-│       ├── specs-panel.tsx
-│       ├── data-table.tsx
-│       └── attachments.tsx
-├── lib/
-│   ├── ocr/paddle-ocr.ts     # PaddleOCR integration
-│   ├── pdf/playwright-pdf.ts # PDF generation
-│   ├── calculations.ts       # Load, settlement formulas
-│   └── utils.ts              # General utilities
+│   ├── home/
+│   │   ├── home-screen.tsx     # Test list + new test button
+│   │   ├── test-type-modal.tsx # Test type selection
+│   │   ├── profile-modal.tsx   # User profile/signature
+│   │   └── index.ts
+│   └── test/
+│       ├── project-details.tsx # Project info form
+│       ├── data-entry.tsx      # Readings table view
+│       ├── add-reading-page.tsx# Full-page reading form
+│       ├── report-view.tsx     # Report dashboard
+│       └── index.ts
+│
 ├── store/
-│   └── report-store.ts       # Zustand store
-└── types/
-    └── index.ts              # TypeScript interfaces
+│   └── test-store.ts           # Zustand store with localStorage
+│
+├── types/
+│   └── index.ts                # TypeScript interfaces + helpers
+│
+├── lib/
+│   └── utils.ts                # General utilities (cn, etc.)
+│
+├── styles/
+│   └── globals.css             # Tailwind + custom styles
+│
+└── _archive/                   # Archived OCR workflow (for future use)
+    ├── app/                    # Old verify, report pages
+    ├── components/             # Old upload, verify, report components
+    └── lib/                    # OCR API, calculations, PDF generation
 ```
 
 ---
@@ -247,24 +241,37 @@ Located in `project_info_and_context/`:
 
 | File | Purpose |
 |------|---------|
-| `all-hand-readings.pdf` | Sample handwritten field sheet (OCR input) |
+| `report.html` | Reference interactive dashboard design (SSOT) |
 | `these-are-the-reports-to-automate/` | Target PDF reports to replicate |
-| `report.html` | Reference interactive dashboard design |
 | `toaz.info-is-2911...pdf` | IS 2911 Part 4 standard reference |
 | `Pile Load Test.pptx` | Domain knowledge presentation |
 
+Design files in `figma/` (gitignored):
+| File | Purpose |
+|------|---------|
+| `Mobile App for Site Engineers/` | Figma export with UI components |
+
 ---
 
-## Future Roadmap
+## Roadmap
 
-- [ ] **Phase 1**: MVP with in-memory storage (current)
-- [ ] **Phase 2**: Supabase backend for persistence
-- [ ] **Phase 3**: Multi-user roles (Site Engineer, Reviewer, Manager)
-- [ ] **Phase 4**: Mobile app for field capture
-- [ ] **Phase 5**: AI-powered anomaly detection in test data
+- [x] **Phase 1 (Current)**: Manual data entry MVP
+  - [x] Home screen with test list
+  - [x] Test type selection
+  - [x] Project details form
+  - [x] Data entry with readings table
+  - [x] Report view with KPIs and chart
+  - [x] localStorage persistence
+  - [ ] PDF export
+- [ ] **Phase 2**: OCR Integration (archived code ready)
+- [ ] **Phase 3**: Supabase backend for cloud persistence
+- [ ] **Phase 4**: Multi-user roles (Site Engineer, Reviewer, Manager)
+- [ ] **Phase 5**: Mobile app (React Native / PWA)
 
 ---
 
 ## License
 
 Private - ZedGeo Engineering Solutions
+
+<!-- Ranchordas#1995 -->
