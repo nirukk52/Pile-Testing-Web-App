@@ -87,3 +87,123 @@ body {
   }
 }
 
+/**
+ * Print Styles
+ * Why: Optimizes the report output for PDF/print generation.
+ * Ensures clean, professional documents for engineering reports.
+ */
+@media print {
+  /* Reset background for printing */
+  body {
+    background-color: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Page setup */
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+
+  /* Force page breaks where needed */
+  .print\\:break-before {
+    page-break-before: always;
+  }
+
+  .print\\:break-after {
+    page-break-after: always;
+  }
+
+  .print\\:avoid-break {
+    page-break-inside: avoid;
+  }
+
+  /* Cards should maintain their styling */
+  .bg-white {
+    background-color: white !important;
+    box-shadow: none !important;
+    border: 1px solid #e2e8f0 !important;
+  }
+
+  /* Ensure colors print correctly */
+  .bg-green-50 {
+    background-color: #f0fdf4 !important;
+  }
+
+  .bg-green-100 {
+    background-color: #dcfce7 !important;
+  }
+
+  .bg-red-50 {
+    background-color: #fef2f2 !important;
+  }
+
+  .bg-red-100 {
+    background-color: #fee2e2 !important;
+  }
+
+  .bg-blue-100 {
+    background-color: #dbeafe !important;
+  }
+
+  .bg-amber-100 {
+    background-color: #fef3c7 !important;
+  }
+
+  .bg-slate-50 {
+    background-color: #f8fafc !important;
+  }
+
+  /* Text colors for pass/fail */
+  .text-green-700 {
+    color: #15803d !important;
+  }
+
+  .text-red-700 {
+    color: #b91c1c !important;
+  }
+
+  .text-blue-700 {
+    color: #1d4ed8 !important;
+  }
+
+  /* Chart container */
+  .h-72 {
+    height: 280px !important;
+  }
+
+  /* Table styling */
+  table {
+    page-break-inside: auto;
+  }
+
+  tr {
+    page-break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  /* Hide non-essential elements */
+  .print\\:hidden {
+    display: none !important;
+  }
+
+  /* Show print-only elements */
+  .hidden.print\\:block {
+    display: block !important;
+  }
+
+  /* Reduce spacing for print */
+  .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 1rem;
+  }
+
+  /* Ensure grid doesn't break weirdly */
+  .grid {
+    page-break-inside: avoid;
+  }
+}
+

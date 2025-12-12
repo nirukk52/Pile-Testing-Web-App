@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type {
-  ProjectInfo,
+  LegacyProjectInfo,
   LoadEntry,
   SavedTest,
   UserProfile,
@@ -17,6 +17,7 @@ import { EMPTY_PROJECT_INFO } from '@/types';
 /**
  * Main application state for pile testing.
  * Why: Centralized state management that persists tests to localStorage.
+ * Note: Uses LegacyProjectInfo for backward compatibility with existing components.
  */
 interface TestState {
   // App navigation
@@ -27,8 +28,8 @@ interface TestState {
   // All saved tests
   allTests: SavedTest[];
 
-  // Current test being edited
-  projectInfo: ProjectInfo;
+  // Current test being edited (using legacy type for compatibility)
+  projectInfo: LegacyProjectInfo;
   loadEntries: LoadEntry[];
 
   // User profile
@@ -55,10 +56,10 @@ interface TestActions {
   backToHome: () => void;
 
   // Project info
-  setProjectInfo: (info: ProjectInfo) => void;
-  updateProjectField: <K extends keyof ProjectInfo>(
+  setProjectInfo: (info: LegacyProjectInfo) => void;
+  updateProjectField: <K extends keyof LegacyProjectInfo>(
     field: K,
-    value: ProjectInfo[K]
+    value: LegacyProjectInfo[K]
   ) => void;
 
   // Load entries

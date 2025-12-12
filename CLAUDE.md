@@ -316,3 +316,10 @@ The `src/_archive/` folder contains the original OCR-based workflow:
 | `_archive/lib/pdf/` | Playwright PDF generation |
 
 This code is excluded from TypeScript compilation via `tsconfig.json`.
+
+## Active Technologies
+- TypeScript 5+, Node.js 18+ + Next.js 14 (App Router), Zustand 4+, Chart.js 4+, Playwright (PDF), Prisma ORM (001-ivplt-report-automation)
+- Supabase PostgreSQL + Supabase Storage (images/certificates) (001-ivplt-report-automation)
+
+## Recent Changes
+- 001-ivplt-report-automation: Added TypeScript 5+, Node.js 18+ + Next.js 14 (App Router), Zustand 4+, Chart.js 4+, Playwright (PDF), Prisma ORM

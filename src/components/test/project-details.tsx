@@ -1,39 +1,60 @@
 'use client';
 
-import { ChevronRight } from 'lucide-react';
-import type { ProjectInfo } from '@/types';
+import { useEffect } from 'react';
+import { ChevronRight, Calculator } from 'lucide-react';
+import type { LegacyProjectInfo } from '@/types';
+import { TEST_TYPES } from '@/types';
 
 /**
  * Props for the ProjectDetails component.
  * Why: Defines data and callbacks for project info form.
  */
 interface ProjectDetailsProps {
-  projectInfo: ProjectInfo;
-  onUpdateField: <K extends keyof ProjectInfo>(field: K, value: ProjectInfo[K]) => void;
+  projectInfo: LegacyProjectInfo;
+  onUpdateField: <K extends keyof LegacyProjectInfo>(field: K, value: LegacyProjectInfo[K]) => void;
   onNext: () => void;
 }
 
 /**
  * Form for entering project and pile specifications.
- * Why: First step in test workflow - collects all metadata.
+ * Why: First step in test workflow - collects all metadata for IS 2911 compliant reports.
  */
 export function ProjectDetails({
   projectInfo,
   onUpdateField,
   onNext,
 }: ProjectDetailsProps) {
-  const handleChange = (field: keyof ProjectInfo, value: string) => {
-    onUpdateField(field, value as ProjectInfo[typeof field]);
+  const handleChange = (field: keyof LegacyProjectInfo, value: string) => {
+    onUpdateField(field, value as LegacyProjectInfo[typeof field]);
   };
+
+  // Get test type config for multiplier
+  const testTypeConfig = TEST_TYPES.find(t => t.id === projectInfo.testType);
+  const loadMultiplier = testTypeConfig?.loadMultiplier || 2.5;
+
+  // Auto-calculate test load when design load changes
+  useEffect(() => {
+    if (projectInfo.designLoadOnPile) {
+      const designLoad = parseFloat(projectInfo.designLoadOnPile);
+      if (!isNaN(designLoad) && designLoad > 0) {
+        const calculatedTestLoad = (designLoad * loadMultiplier).toFixed(2);
+        if (projectInfo.testLoad !== calculatedTestLoad) {
+          onUpdateField('testLoad', calculatedTestLoad);
+        }
+      }
+    }
+  }, [projectInfo.designLoadOnPile, loadMultiplier, projectInfo.testLoad, onUpdateField]);
 
   const isFormValid = () => {
     return (
-      projectInfo.reportNo &&
+      projectInfo.pileId &&
       projectInfo.project &&
       projectInfo.location &&
       projectInfo.contractor &&
       projectInfo.client &&
-      projectInfo.ramArea
+      projectInfo.ramArea &&
+      projectInfo.pileDiameter &&
+      projectInfo.designLoadOnPile
     );
   };
 
@@ -50,6 +71,9 @@ export function ProjectDetails({
             <div>
               <p className="text-xs text-blue-200 uppercase mb-1">Test Type</p>
               <h3 className="text-white font-semibold">{projectInfo.testType}</h3>
+              <p className="text-blue-200 text-sm mt-1">
+                Test Load = {loadMultiplier}× Design Load
+              </p>
             </div>
             <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
               <span className="text-2xl">📋</span>
@@ -58,26 +82,67 @@ export function ProjectDetails({
         </div>
       )}
 
+      {/* Pile Identification */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-5">
-        <h2 className="text-slate-800 font-semibold text-lg">Project Information</h2>
+        <h2 className="text-slate-800 font-semibold text-lg">Pile Identification</h2>
 
-        <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
           <div>
             <label className={labelClass}>
-              Report No. <span className="text-rose-600">*</span>
+              Pile ID <span className="text-rose-600">*</span>
             </label>
             <input
               type="text"
-              value={projectInfo.reportNo}
-              onChange={(e) => handleChange('reportNo', e.target.value)}
-              placeholder="e.g., TP-04"
+              value={projectInfo.pileId}
+              onChange={(e) => handleChange('pileId', e.target.value)}
+              placeholder="e.g., TP-02"
               className={inputClass}
             />
           </div>
 
           <div>
             <label className={labelClass}>
-              Project <span className="text-rose-600">*</span>
+              Report No.
+            </label>
+            <input
+              type="text"
+              value={projectInfo.reportNo}
+              onChange={(e) => handleChange('reportNo', e.target.value)}
+              placeholder="e.g., IVPLT-001"
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>Test Date</label>
+            <input
+              type="date"
+              value={projectInfo.testDate}
+              onChange={(e) => handleChange('testDate', e.target.value)}
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>Date of Casting</label>
+            <input
+              type="date"
+              value={projectInfo.dateOfCasting}
+              onChange={(e) => handleChange('dateOfCasting', e.target.value)}
+              className={inputClass}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Project Information */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-5">
+        <h2 className="text-slate-800 font-semibold text-lg">Project Information</h2>
+
+        <div className="space-y-4">
+          <div>
+            <label className={labelClass}>
+              Project Name <span className="text-rose-600">*</span>
             </label>
             <input
               type="text"
@@ -101,6 +166,32 @@ export function ProjectDetails({
             />
           </div>
 
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>
+                Client <span className="text-rose-600">*</span>
+              </label>
+              <input
+                type="text"
+                value={projectInfo.client}
+                onChange={(e) => handleChange('client', e.target.value)}
+                placeholder="e.g., NMC"
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>PMC</label>
+              <input
+                type="text"
+                value={projectInfo.pmc}
+                onChange={(e) => handleChange('pmc', e.target.value)}
+                placeholder="(Optional)"
+                className={inputClass}
+              />
+            </div>
+          </div>
+
           <div>
             <label className={labelClass}>
               Contractor <span className="text-rose-600">*</span>
@@ -113,50 +204,41 @@ export function ProjectDetails({
               className={inputClass}
             />
           </div>
-
-          <div>
-            <label className={labelClass}>
-              Client <span className="text-rose-600">*</span>
-            </label>
-            <input
-              type="text"
-              value={projectInfo.client}
-              onChange={(e) => handleChange('client', e.target.value)}
-              placeholder="e.g., NMC"
-              className={inputClass}
-            />
-          </div>
         </div>
       </div>
 
+      {/* Pile Specifications */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-5">
-        <h2 className="text-slate-800 font-semibold text-lg">Test Specifications</h2>
+        <h2 className="text-slate-800 font-semibold text-lg">Pile Specifications</h2>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className={labelClass}>LC of Dial Gauge (mm)</label>
+            <label className={labelClass}>
+              Pile Diameter (mm) <span className="text-rose-600">*</span>
+            </label>
             <input
-              type="text"
-              value={projectInfo.lcOfDialGauge}
-              onChange={(e) => handleChange('lcOfDialGauge', e.target.value)}
-              placeholder="0.01"
+              type="number"
+              value={projectInfo.pileDiameter}
+              onChange={(e) => handleChange('pileDiameter', e.target.value)}
+              placeholder="600"
               className={inputClass}
             />
           </div>
 
           <div>
-            <label className={labelClass}>Design Load (T)</label>
+            <label className={labelClass}>Pile Depth (m)</label>
             <input
-              type="text"
-              value={projectInfo.designLoadOnPile}
-              onChange={(e) => handleChange('designLoadOnPile', e.target.value)}
-              placeholder="3.5"
+              type="number"
+              step="0.01"
+              value={projectInfo.pileDepth}
+              onChange={(e) => handleChange('pileDepth', e.target.value)}
+              placeholder="10.31"
               className={inputClass}
             />
           </div>
 
           <div>
-            <label className={labelClass}>Mixed Design</label>
+            <label className={labelClass}>Concrete Grade</label>
             <input
               type="text"
               value={projectInfo.mixedDesign}
@@ -167,22 +249,48 @@ export function ProjectDetails({
           </div>
 
           <div>
-            <label className={labelClass}>Pile Diameter (mm)</label>
+            <label className={labelClass}>
+              Design Load (MT) <span className="text-rose-600">*</span>
+            </label>
             <input
-              type="text"
-              value={projectInfo.pileDiameter}
-              onChange={(e) => handleChange('pileDiameter', e.target.value)}
-              placeholder="600"
+              type="number"
+              step="0.01"
+              value={projectInfo.designLoadOnPile}
+              onChange={(e) => handleChange('designLoadOnPile', e.target.value)}
+              placeholder="147"
               className={inputClass}
             />
           </div>
+        </div>
 
+        {/* Auto-calculated Test Load */}
+        {projectInfo.designLoadOnPile && projectInfo.testLoad && (
+          <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Calculator className="w-5 h-5 text-blue-600" />
+                <span className="text-blue-700">
+                  Test Load ({loadMultiplier}× Design Load):
+                </span>
+              </div>
+              <span className="text-blue-900 font-bold text-lg">{projectInfo.testLoad} MT</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Equipment Specifications */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-5">
+        <h2 className="text-slate-800 font-semibold text-lg">Equipment Specifications</h2>
+
+        <div className="grid grid-cols-2 gap-4">
           <div>
             <label className={labelClass}>
               Ram Area (cm²) <span className="text-rose-600">*</span>
             </label>
             <input
-              type="text"
+              type="number"
+              step="0.01"
               value={projectInfo.ramArea}
               onChange={(e) => handleChange('ramArea', e.target.value)}
               placeholder="71.26"
@@ -194,28 +302,31 @@ export function ProjectDetails({
           </div>
 
           <div>
-            <label className={labelClass}>Date of Casting</label>
+            <label className={labelClass}>LC of Dial Gauge (mm)</label>
             <input
-              type="date"
-              value={projectInfo.dateOfCasting}
-              onChange={(e) => handleChange('dateOfCasting', e.target.value)}
+              type="number"
+              step="0.001"
+              value={projectInfo.lcOfDialGauge}
+              onChange={(e) => handleChange('lcOfDialGauge', e.target.value)}
+              placeholder="0.01"
               className={inputClass}
             />
           </div>
 
           <div className="col-span-2">
-            <label className={labelClass}>Pile Depth (m)</label>
+            <label className={labelClass}>Hydraulic Jack Name</label>
             <input
               type="text"
-              value={projectInfo.pileDepth}
-              onChange={(e) => handleChange('pileDepth', e.target.value)}
-              placeholder="10.31"
+              value={projectInfo.jackName}
+              onChange={(e) => handleChange('jackName', e.target.value)}
+              placeholder="e.g., Jack Serial No. / Make"
               className={inputClass}
             />
           </div>
         </div>
       </div>
 
+      {/* Continue Button */}
       <button
         onClick={onNext}
         disabled={!isFormValid()}

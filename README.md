@@ -275,3 +275,155 @@ Design files in `figma/` (gitignored):
 Private - ZedGeo Engineering Solutions
 
 <!-- Ranchordas#1995 -->
+
+<!-- {
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp",
+        "--api-key",
+        "<YOUR_CONTEXT7_API_KEY>"
+      ]
+    },
+    "github": {
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer <YOUR_GITHUB_PAT>"
+      }
+    },
+    "graphiti": {
+      "transport": "sse",
+      "url": "https://graphiti-mcp.fly.dev/sse"
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest"
+      ]
+    },
+    "supabase": {
+      "url": "https://mcp.supabase.com/mcp?project_ref=cfmywntdiygatvagqucn",
+      "headers": {}
+    },
+    "Figma": {
+      "url": "https://mcp.figma.com/mcp",
+      "headers": {}
+    },
+    "Better Auth": {
+      "url": "https://mcp.chonkie.ai/better-auth/better-auth-builder/mcp",
+      "headers": {}
+    },
+    "vercel": {
+      "url": "https://mcp.vercel.com",
+      "headers": {}
+    },
+    "aws-knowledge-mcp": {
+      "url": "https://knowledge-mcp.global.api.aws",
+      "headers": {}
+    },
+    "awslabs.aws-api-mcp-server": {
+      "command": "uvx awslabs.aws-api-mcp-server@latest",
+      "env": {
+        "AWS_REGION": "us-east-1"
+      },
+      "disabled": false,
+      "autoApprove": [],
+      "args": []
+    },
+    "kite": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "http://localhost:8080/mcp",
+        "--allow-http"
+      ]
+    },
+    "Docs by LangChain": {
+      "name": "Docs by LangChain",
+      "url": "https://docs.langchain.com/mcp",
+      "headers": {}
+    },
+    "BrowserStack": {
+      "command": "npx -y @browserstack/mcp-server@latest",
+      "env": {
+        "BROWSERSTACK_USERNAME": "<username>",
+        "BROWSERSTACK_ACCESS_KEY": "<access_key>"
+      },
+      "args": []
+    },
+    "Prisma-Remote": {
+      "command": "npx -y mcp-remote https://mcp.prisma.io/mcp",
+      "env": {},
+      "args": []
+    }
+  }
+} -->
+
+✅ A. Major Test Types (IS 2911 – Part 4)
+
+These are the primary ones used in every Indian foundation project.
+
+1. Initial Vertical Load Test (IVPLT)
+
+Purpose: Determine ultimate load capacity and derive safe load.
+Test Load: 2.5× design load.
+
+2. Routine Vertical Load Test (RVPLT)
+
+Purpose: Verify working load performance.
+Test Load: 1.5× design load.
+
+3. Lateral Load Test (Initial / Routine)
+
+Purpose: Determine pile’s ability to resist horizontal loads.
+Acceptance: 5 mm deflection limit typically used.
+Loads: Usually go up to design lateral load or 1.5× depending on spec.
+
+4. Uplift / Pullout Load Test (Initial / Routine)
+
+Purpose: Determine tensile capacity.
+Acceptance: Uplift at design load within limits (12 mm or 2% dia).
+
+These four are the ones your existing reports cover.
+
+✅ B. Variants / Modes Used in IS 2911 & Common Indian Practice
+5. Cyclic Vertical Load Test
+
+Purpose: Determine elastic rebound, settlement behaviour under repeated load cycles.
+Not always required, but many major contractors include it.
+
+6. Cyclic Lateral Load Test
+
+Less common, but used for transmission line foundations, jetties, offshore works.
+
+7. Constant Rate of Penetration Test (CRP / CRPT)
+
+Purpose: Directly determine ultimate bearing capacity by pushing pile at constant rate.
+More common in offshore or research settings than typical building projects.
+
+8. Maintained Load Test (MLT)
+
+This is actually the default method for IVPLT/RVPLT — apply load in increments and keep it “maintained” until the movement stabilizes.
+
+| **Test Type**                                      | **Purpose**                                      | **Do we need to support it? (Client selects)** | **Notes (1-line)**                  |
+| -------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------- | ----------------------------------- |
+| **IVPLT – Initial Vertical Load Test**             | Determine ultimate capacity                      | YES / NO                                       | Standard for new projects           |
+| **RVPLT – Routine Vertical Load Test**             | Prove working load capacity                      | YES / NO                                       | Most common on site                 |
+| **Lateral Load Test**                              | Horizontal stability check                       | YES / NO                                       | 5 mm deflection limit typical       |
+| **Uplift / Pullout Test**                          | Tensile capacity                                 | YES / NO                                       | For tanks, towers, bridges          |
+| **Cyclic Vertical Load Test**                      | Settlement + rebound behaviour                   | YES / NO                                       | Rare but used on bigger infra jobs  |
+| **Cyclic Lateral Load Test**                       | Lateral stiffness behaviour                      | YES / NO                                       | Very rare unless specified          |
+| **CRP / CRPT – Constant Rate of Penetration Test** | Direct ultimate capacity by pushing continuously | YES / NO                                       | Not used in normal IS 2911 projects |
+| **Dynamic Load Test (PDA)**                        | Capacity via hammer impact waves                 | YES / NO                                       | Offshore / driven piles             |
+| **Low-Strain PIT / Sonic Echo**                    | Pile integrity (not load)                        | YES / NO                                       | QA/QC only, no load curves          |
+| **Crosshole Sonic Logging (CSL)**                  | Concrete quality                                 | YES / NO                                       | For bored piles >800 mm             |
+| **Osterberg Cell Test (O-Cell)**                   | Large diameter piles, up/down loading            | YES / NO                                       | Metro/bridge megaprojects           |

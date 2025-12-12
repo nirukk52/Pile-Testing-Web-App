@@ -16,11 +16,11 @@ interface TestTypeModalProps {
  * Icon mapping for test types.
  * Why: Visual representation of test direction.
  */
-const iconMap = {
+const iconMap: Record<string, typeof ArrowDown> = {
   IVPLT: ArrowDown,
   RVPLT: ArrowDown,
-  Lateral: Minus,
-  Uplift: ArrowUp,
+  LATERAL: Minus,
+  UPLIFT: ArrowUp,
 };
 
 /**

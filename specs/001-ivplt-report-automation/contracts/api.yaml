@@ -1,0 +1,994 @@
+openapi: 3.0.3
+info:
+  title: PileTest Pro API
+  description: Internal API for IVPLT Report Automation
+  version: 1.0.0
+
+servers:
+  - url: /api
+    description: Next.js API Routes
+
+paths:
+  # ===========================================================================
+  # PROJECTS
+  # ===========================================================================
+  /projects:
+    get:
+      summary: List all projects
+      operationId: listProjects
+      responses:
+        '200':
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Project'
+    
+    post:
+      summary: Create a new project
+      operationId: createProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+
+  /projects/{projectId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    
+    get:
+      summary: Get project by ID
+      operationId: getProject
+      responses:
+        '200':
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '404':
+          description: Project not found
+    
+    patch:
+      summary: Update project
+      operationId: updateProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectRequest'
+      responses:
+        '200':
+          description: Project updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+
+  # ===========================================================================
+  # TESTS
+  # ===========================================================================
+  /tests:
+    get:
+      summary: List all tests
+      operationId: listTests
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: testType
+          in: query
+          schema:
+            $ref: '#/components/schemas/TestType'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/TestStatus'
+      responses:
+        '200':
+          description: List of tests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Test'
+    
+    post:
+      summary: Create a new test
+      operationId: createTest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTestRequest'
+      responses:
+        '201':
+          description: Test created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Test'
+
+  /tests/{testId}:
+    parameters:
+      - name: testId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    
+    get:
+      summary: Get test with all relations
+      operationId: getTest
+      responses:
+        '200':
+          description: Test details with readings, images, certificates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestWithRelations'
+        '404':
+          description: Test not found
+    
+    patch:
+      summary: Update test details
+      operationId: updateTest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTestRequest'
+      responses:
+        '200':
+          description: Test updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Test'
+    
+    delete:
+      summary: Delete test and all related data
+      operationId: deleteTest
+      responses:
+        '204':
+          description: Test deleted
+
+  # ===========================================================================
+  # READINGS
+  # ===========================================================================
+  /tests/{testId}/readings:
+    parameters:
+      - name: testId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    
+    get:
+      summary: List readings for a test
+      operationId: listReadings
+      responses:
+        '200':
+          description: List of readings ordered by sequence
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Reading'
+    
+    post:
+      summary: Add a new reading
+      operationId: createReading
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReadingRequest'
+      responses:
+        '201':
+          description: Reading created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reading'
+        '400':
+          description: Validation error (e.g., no enabled gauges)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+
+  /tests/{testId}/readings/{readingId}:
+    parameters:
+      - name: testId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: readingId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    
+    patch:
+      summary: Update a reading
+      operationId: updateReading
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateReadingRequest'
+      responses:
+        '200':
+          description: Reading updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reading'
+    
+    delete:
+      summary: Delete a reading
+      operationId: deleteReading
+      responses:
+        '204':
+          description: Reading deleted
+
+  # ===========================================================================
+  # SITE IMAGES
+  # ===========================================================================
+  /tests/{testId}/images:
+    parameters:
+      - name: testId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    
+    get:
+      summary: List site images for a test
+      operationId: listSiteImages
+      responses:
+        '200':
+          description: List of images ordered by displayOrder
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SiteImage'
+    
+    post:
+      summary: Upload a site image
+      operationId: uploadSiteImage
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Image file (JPEG, PNG, WebP, max 10MB)
+                caption:
+                  type: string
+                  maxLength: 200
+      responses:
+        '201':
+          description: Image uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteImage'
+        '400':
+          description: Invalid file type or too many images
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+
+  /tests/{testId}/images/{imageId}:
+    parameters:
+      - name: testId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: imageId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    
+    patch:
+      summary: Update image caption or order
+      operationId: updateSiteImage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                caption:
+                  type: string
+                  maxLength: 200
+                displayOrder:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: Image updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteImage'
+    
+    delete:
+      summary: Delete a site image
+      operationId: deleteSiteImage
+      responses:
+        '204':
+          description: Image deleted from storage and database
+
+  # ===========================================================================
+  # CALIBRATION CERTIFICATES
+  # ===========================================================================
+  /tests/{testId}/certificates:
+    parameters:
+      - name: testId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    
+    get:
+      summary: List certificates for a test
+      operationId: listCertificates
+      responses:
+        '200':
+          description: List of certificates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CalibrationCertificate'
+    
+    post:
+      summary: Upload a calibration certificate
+      operationId: uploadCertificate
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - certificateType
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: PDF file (max 5MB)
+                certificateType:
+                  $ref: '#/components/schemas/CertificateType'
+      responses:
+        '201':
+          description: Certificate uploaded (replaces existing of same type)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalibrationCertificate'
+        '400':
+          description: Invalid file type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+
+  /tests/{testId}/certificates/{certificateId}:
+    parameters:
+      - name: testId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: certificateId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    
+    delete:
+      summary: Delete a certificate
+      operationId: deleteCertificate
+      responses:
+        '204':
+          description: Certificate deleted
+
+  # ===========================================================================
+  # CALCULATIONS & REPORT
+  # ===========================================================================
+  /tests/{testId}/calculate:
+    parameters:
+      - name: testId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    
+    get:
+      summary: Calculate results for a test
+      operationId: calculateResults
+      description: Runs the TestEngine calculations and returns results without saving
+      responses:
+        '200':
+          description: Calculation results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalculationResult'
+        '400':
+          description: Not enough readings to calculate
+
+  /tests/{testId}/conclusion:
+    parameters:
+      - name: testId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    
+    post:
+      summary: Generate AI conclusion
+      operationId: generateConclusion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - calculationResult
+              properties:
+                calculationResult:
+                  $ref: '#/components/schemas/CalculationResult'
+      responses:
+        '200':
+          description: Generated conclusion text
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conclusion:
+                    type: string
+
+  /tests/{testId}/pdf:
+    parameters:
+      - name: testId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    
+    post:
+      summary: Generate PDF report
+      operationId: generatePdf
+      description: Generates complete PDF report with all sections, images, and certificates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                conclusion:
+                  type: string
+                  description: Custom conclusion text (overrides AI)
+      responses:
+        '200':
+          description: PDF file
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Test not ready for report (missing data)
+
+# =============================================================================
+# COMPONENTS
+# =============================================================================
+components:
+  schemas:
+    # -------------------------------------------------------------------------
+    # Enums
+    # -------------------------------------------------------------------------
+    TestType:
+      type: string
+      enum: [IVPLT, RVPLT, LATERAL, UPLIFT]
+    
+    TestPhase:
+      type: string
+      enum: [LOADING, HOLD, UNLOADING]
+    
+    TestStatus:
+      type: string
+      enum: [DRAFT, IN_PROGRESS, COMPLETED, REPORTED]
+    
+    CertificateType:
+      type: string
+      enum: [HYDRAULIC_JACK, PRESSURE_GAUGE, DIAL_GAUGE, PROVING_RING, OTHER]
+
+    # -------------------------------------------------------------------------
+    # Core Models
+    # -------------------------------------------------------------------------
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        client:
+          type: string
+        contractor:
+          type: string
+        pmc:
+          type: string
+        location:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    
+    Test:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        testType:
+          $ref: '#/components/schemas/TestType'
+        reportNo:
+          type: string
+        testDate:
+          type: string
+          format: date-time
+        pileId:
+          type: string
+        pileDiameterMm:
+          type: number
+        pileDepthM:
+          type: number
+        concreteGrade:
+          type: string
+        designLoadT:
+          type: number
+        testLoadT:
+          type: number
+        jackName:
+          type: string
+        ramAreaCm2:
+          type: number
+        gaugeLeastCountMm:
+          type: number
+        status:
+          $ref: '#/components/schemas/TestStatus'
+        maxSettlementMm:
+          type: number
+          nullable: true
+        elasticReboundMm:
+          type: number
+          nullable: true
+        netSettlementMm:
+          type: number
+          nullable: true
+        safeLoadAdoptedT:
+          type: number
+          nullable: true
+        isPassed:
+          type: boolean
+          nullable: true
+        conclusion:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    
+    TestWithRelations:
+      allOf:
+        - $ref: '#/components/schemas/Test'
+        - type: object
+          properties:
+            project:
+              $ref: '#/components/schemas/Project'
+            readings:
+              type: array
+              items:
+                $ref: '#/components/schemas/Reading'
+            siteImages:
+              type: array
+              items:
+                $ref: '#/components/schemas/SiteImage'
+            certificates:
+              type: array
+              items:
+                $ref: '#/components/schemas/CalibrationCertificate'
+    
+    Reading:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        testId:
+          type: string
+          format: uuid
+        sequence:
+          type: integer
+        phase:
+          $ref: '#/components/schemas/TestPhase'
+        recordedAt:
+          type: string
+          format: date-time
+        pressureKgCm2:
+          type: number
+        loadT:
+          type: number
+        dg1:
+          type: number
+        dg2:
+          type: number
+        dg3:
+          type: number
+        dg4:
+          type: number
+        dg1Enabled:
+          type: boolean
+        dg2Enabled:
+          type: boolean
+        dg3Enabled:
+          type: boolean
+        dg4Enabled:
+          type: boolean
+        avgSettlementMm:
+          type: number
+        remark:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    
+    SiteImage:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        testId:
+          type: string
+          format: uuid
+        storagePath:
+          type: string
+        fileName:
+          type: string
+        caption:
+          type: string
+          nullable: true
+        displayOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        signedUrl:
+          type: string
+          description: Temporary signed URL for image access
+    
+    CalibrationCertificate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        testId:
+          type: string
+          format: uuid
+        certificateType:
+          $ref: '#/components/schemas/CertificateType'
+        storagePath:
+          type: string
+        fileName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        signedUrl:
+          type: string
+          description: Temporary signed URL for PDF access
+
+    # -------------------------------------------------------------------------
+    # Calculation Result
+    # -------------------------------------------------------------------------
+    CalculationResult:
+      type: object
+      properties:
+        maxSettlementMm:
+          type: number
+        elasticReboundMm:
+          type: number
+        netSettlementMm:
+          type: number
+        loadAt12mmT:
+          type: number
+          nullable: true
+        safeLoadFromSettlementT:
+          type: number
+          nullable: true
+        loadAt10PercentDiaT:
+          type: number
+          nullable: true
+        safeLoadFromUltimateT:
+          type: number
+          nullable: true
+        governingCriterion:
+          type: string
+          enum: [SETTLEMENT, ULTIMATE, NONE]
+        safeLoadAdoptedT:
+          type: number
+        isPassed:
+          type: boolean
+        settlementLimitMm:
+          type: number
+
+    # -------------------------------------------------------------------------
+    # Request Bodies
+    # -------------------------------------------------------------------------
+    CreateProjectRequest:
+      type: object
+      required:
+        - name
+        - client
+        - contractor
+        - location
+      properties:
+        name:
+          type: string
+        client:
+          type: string
+        contractor:
+          type: string
+        pmc:
+          type: string
+        location:
+          type: string
+    
+    UpdateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        client:
+          type: string
+        contractor:
+          type: string
+        pmc:
+          type: string
+        location:
+          type: string
+    
+    CreateTestRequest:
+      type: object
+      required:
+        - projectId
+        - testType
+        - pileId
+        - pileDiameterMm
+        - pileDepthM
+        - concreteGrade
+        - designLoadT
+        - ramAreaCm2
+      properties:
+        projectId:
+          type: string
+          format: uuid
+        testType:
+          $ref: '#/components/schemas/TestType'
+        reportNo:
+          type: string
+        testDate:
+          type: string
+          format: date-time
+        pileId:
+          type: string
+        pileDiameterMm:
+          type: number
+          minimum: 0
+        pileDepthM:
+          type: number
+          minimum: 0
+        concreteGrade:
+          type: string
+        designLoadT:
+          type: number
+          minimum: 0
+        ramAreaCm2:
+          type: number
+          minimum: 0
+        jackName:
+          type: string
+        gaugeLeastCountMm:
+          type: number
+          default: 0.01
+    
+    UpdateTestRequest:
+      type: object
+      properties:
+        reportNo:
+          type: string
+        testDate:
+          type: string
+          format: date-time
+        pileId:
+          type: string
+        pileDiameterMm:
+          type: number
+        pileDepthM:
+          type: number
+        concreteGrade:
+          type: string
+        designLoadT:
+          type: number
+        ramAreaCm2:
+          type: number
+        jackName:
+          type: string
+        gaugeLeastCountMm:
+          type: number
+        conclusion:
+          type: string
+    
+    CreateReadingRequest:
+      type: object
+      required:
+        - phase
+        - pressureKgCm2
+        - dg1
+        - dg2
+        - dg3
+        - dg4
+      properties:
+        phase:
+          $ref: '#/components/schemas/TestPhase'
+        recordedAt:
+          type: string
+          format: date-time
+        pressureKgCm2:
+          type: number
+          minimum: 0
+        dg1:
+          type: number
+          minimum: 0
+        dg2:
+          type: number
+          minimum: 0
+        dg3:
+          type: number
+          minimum: 0
+        dg4:
+          type: number
+          minimum: 0
+        dg1Enabled:
+          type: boolean
+          default: true
+        dg2Enabled:
+          type: boolean
+          default: true
+        dg3Enabled:
+          type: boolean
+          default: true
+        dg4Enabled:
+          type: boolean
+          default: true
+        remark:
+          type: string
+    
+    UpdateReadingRequest:
+      type: object
+      properties:
+        phase:
+          $ref: '#/components/schemas/TestPhase'
+        pressureKgCm2:
+          type: number
+        dg1:
+          type: number
+        dg2:
+          type: number
+        dg3:
+          type: number
+        dg4:
+          type: number
+        dg1Enabled:
+          type: boolean
+        dg2Enabled:
+          type: boolean
+        dg3Enabled:
+          type: boolean
+        dg4Enabled:
+          type: boolean
+        remark:
+          type: string
+
+    # -------------------------------------------------------------------------
+    # Error Response
+    # -------------------------------------------------------------------------
+    ValidationError:
+      type: object
+      properties:
+        error:
+          type: string
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
