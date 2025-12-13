@@ -100,7 +100,7 @@ export function AddReadingPage({ onSave, onCancel, projectInfo, editData }: AddR
   // Detect if existing reading had manual overrides by comparing stored vs calculated values
   // Why: Preserve manual corrections when editing to prevent accidental recalculation.
   const detectExistingOverrides = () => {
-    if (!editData) return { hasLoadOverride: false, storedLoad: '' };
+    if (!editData) return { hasLoadOverride: false, storedLoad: '', hasAvgOverride: false, storedAvg: '' };
     
     // Calculate what load SHOULD be from stored pressure
     const expectedLoad = calculateLoad(editData.pressureGauge, projectInfo.ramArea);
@@ -111,9 +111,29 @@ export function AddReadingPage({ onSave, onCancel, projectInfo, editData }: AddR
     const hasLoadOverride = !isNaN(storedLoad) && !isNaN(expectedLoadNum) && 
       Math.abs(storedLoad - expectedLoadNum) > 0.01; // Allow 0.01 MT tolerance for rounding
     
+    // Calculate what average SHOULD be from stored dial gauges
+    const expectedAvg = calculateAverageWithEnabled(
+      editData.dialGauge1,
+      editData.dialGauge2,
+      editData.dialGauge3,
+      editData.dialGauge4,
+      editData.dg1Enabled ?? true,
+      editData.dg2Enabled ?? true,
+      editData.dg3Enabled ?? true,
+      editData.dg4Enabled ?? true
+    );
+    const storedAvg = editData.avgSettlement ? parseFloat(editData.avgSettlement) : NaN;
+    const expectedAvgNum = parseFloat(expectedAvg);
+    
+    // Detect avg override: if stored differs from calculated beyond rounding tolerance
+    const hasAvgOverride = !isNaN(storedAvg) && !isNaN(expectedAvgNum) && 
+      Math.abs(storedAvg - expectedAvgNum) > 0.01; // Allow 0.01 mm tolerance for rounding
+    
     return { 
       hasLoadOverride, 
-      storedLoad: editData.load || ''
+      storedLoad: editData.load || '',
+      hasAvgOverride,
+      storedAvg: editData.avgSettlement || ''
     };
   };
 
@@ -122,8 +142,8 @@ export function AddReadingPage({ onSave, onCancel, projectInfo, editData }: AddR
   // Override states for edit mode - initialize based on detected overrides
   const [useLoadOverride, setUseLoadOverride] = useState(existingOverrides.hasLoadOverride);
   const [loadOverrideValue, setLoadOverrideValue] = useState(existingOverrides.storedLoad);
-  const [useAvgOverride, setUseAvgOverride] = useState(false);
-  const [avgOverrideValue, setAvgOverrideValue] = useState('');
+  const [useAvgOverride, setUseAvgOverride] = useState(existingOverrides.hasAvgOverride);
+  const [avgOverrideValue, setAvgOverrideValue] = useState(existingOverrides.storedAvg);
 
   // Calculate values
   const calculatedLoad = calculateLoad(pressure, projectInfo.ramArea);

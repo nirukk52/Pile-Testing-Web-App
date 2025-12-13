@@ -163,6 +163,8 @@ function apiTestToSavedTest(test: api.ApiTest): SavedTest {
         dg2Enabled: reading.dg2Enabled,
         dg3Enabled: reading.dg3Enabled,
         dg4Enabled: reading.dg4Enabled,
+        // Preserve stored avg for detecting manual overrides when editing
+        avgSettlement: reading.avgSettlementMm.toFixed(2),
         timestamp: reading.recordedAt,
         remark: reading.remark || '',
         phase: phaseMap[reading.phase] || 'loading',

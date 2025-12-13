@@ -344,6 +344,8 @@ export interface LegacyReading {
   dg2Enabled?: boolean;
   dg3Enabled?: boolean;
   dg4Enabled?: boolean;
+  // Stored average settlement (for detecting manual overrides when editing)
+  avgSettlement?: string;
   timestamp: string;
   signature?: string;
   remark?: string;
