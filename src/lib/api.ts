@@ -435,38 +435,16 @@ export async function reorderSiteImages(
 // =============================================================================
 
 /**
- * Certificate types matching Prisma enum
- */
-export type CertificateType =
-  | 'HYDRAULIC_JACK'
-  | 'PRESSURE_GAUGE'
-  | 'DIAL_GAUGE'
-  | 'PROVING_RING'
-  | 'OTHER';
-
-/**
- * Calibration certificate from Supabase database
+ * Calibration certificate from database
  */
 export interface ApiCertificate {
   id: string;
   testId: string;
-  certificateType: CertificateType;
   storagePath: string;
   fileName: string;
   createdAt: string;
-  url: string; // Public URL added by API
+  url: string; // Public URL
 }
-
-/**
- * Human-readable labels for certificate types
- */
-export const CERTIFICATE_TYPE_LABELS: Record<CertificateType, string> = {
-  HYDRAULIC_JACK: 'Hydraulic Jack',
-  PRESSURE_GAUGE: 'Pressure Gauge',
-  DIAL_GAUGE: 'Dial Gauge',
-  PROVING_RING: 'Proving Ring',
-  OTHER: 'Other',
-};
 
 /**
  * Fetch all certificates for a test
@@ -480,16 +458,14 @@ export async function fetchCertificates(testId: string): Promise<ApiCertificate[
 }
 
 /**
- * Upload a certificate
+ * Upload a certificate PDF
  */
 export async function uploadCertificate(
   testId: string,
-  file: File,
-  certificateType: CertificateType
+  file: File
 ): Promise<ApiCertificate> {
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('certificateType', certificateType);
 
   const response = await fetch(`/api/tests/${testId}/certificates`, {
     method: 'POST',

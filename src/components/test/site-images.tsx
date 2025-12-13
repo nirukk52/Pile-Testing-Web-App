@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Camera, Upload, Trash2, GripVertical, Loader2, X, ImagePlus, Pencil, Check } from 'lucide-react';
+import { Upload, Trash2, GripVertical, Loader2, X, ImagePlus, Pencil, Check } from 'lucide-react';
 import type { ApiSiteImage } from '@/lib/api';
 import {
   fetchSiteImages,
@@ -117,7 +117,6 @@ export function SiteImages({ testId }: SiteImagesProps) {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch images on mount
   useEffect(() => {
@@ -179,7 +178,6 @@ export function SiteImages({ testId }: SiteImagesProps) {
       setIsUploading(false);
       // Clear file input
       if (fileInputRef.current) fileInputRef.current.value = '';
-      if (cameraInputRef.current) cameraInputRef.current.value = '';
     }
   };
 
@@ -280,43 +278,20 @@ export function SiteImages({ testId }: SiteImagesProps) {
         </div>
       )}
 
-      {/* Upload buttons */}
+      {/* Upload button */}
       {images.length < MAX_IMAGES && (
-        <div className="flex gap-3">
-          {/* Camera capture */}
-          <button
-            onClick={() => cameraInputRef.current?.click()}
-            disabled={isUploading}
-            className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {isUploading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Camera className="w-5 h-5" />
-            )}
-            <span>Take Photo</span>
-          </button>
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={(e) => handleFileSelect(e.target.files)}
-          />
-
-          {/* Gallery upload */}
+        <>
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
-            className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {isUploading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <Upload className="w-5 h-5" />
             )}
-            <span>Upload</span>
+            <span>Upload Images</span>
           </button>
           <input
             ref={fileInputRef}
@@ -326,7 +301,7 @@ export function SiteImages({ testId }: SiteImagesProps) {
             className="hidden"
             onChange={(e) => handleFileSelect(e.target.files)}
           />
-        </div>
+        </>
       )}
 
       {/* Image grid */}

@@ -3,20 +3,42 @@
  * Why: Centralizes Supabase connection for database and storage operations.
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 /**
- * Environment variables for Supabase connection.
- * Why: These must be set in .env.local for the app to function.
+ * Lazy-loaded Supabase client singleton.
+ * Why: Prevents build-time errors when env vars aren't available.
  */
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+let _supabase: SupabaseClient | null = null;
 
 /**
- * Supabase client instance for client-side operations.
- * Why: Used for database queries and storage uploads from browser.
+ * Get Supabase client instance (lazy-loaded).
+ * Why: Only creates client when actually needed, not at module load time.
  */
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error('Supabase environment variables are not configured');
+    }
+
+    _supabase = createClient(supabaseUrl, supabaseAnonKey);
+  }
+  return _supabase;
+}
+
+/**
+ * Legacy export for backward compatibility.
+ * Why: Existing code imports `supabase` directly.
+ * @deprecated Use getSupabase() instead
+ */
+export const supabase = {
+  get storage() {
+    return getSupabase().storage;
+  },
+};
 
 /**
  * Storage bucket names for organized file management.
@@ -34,7 +56,7 @@ export const STORAGE_BUCKETS = {
  * Why: Generates accessible URLs for displaying images in the app.
  */
 export function getPublicUrl(bucket: string, path: string): string {
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  const { data } = getSupabase().storage.from(bucket).getPublicUrl(path);
   return data.publicUrl;
 }
 
@@ -47,7 +69,7 @@ export async function uploadFile(
   path: string,
   file: File
 ): Promise<{ path: string; error: Error | null }> {
-  const { data, error } = await supabase.storage
+  const { data, error } = await getSupabase().storage
     .from(bucket)
     .upload(path, file, {
       cacheControl: '3600',
@@ -69,7 +91,7 @@ export async function deleteFile(
   bucket: string,
   path: string
 ): Promise<{ error: Error | null }> {
-  const { error } = await supabase.storage.from(bucket).remove([path]);
+  const { error } = await getSupabase().storage.from(bucket).remove([path]);
 
   if (error) {
     return { error: new Error(error.message) };

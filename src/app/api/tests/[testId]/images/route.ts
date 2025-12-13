@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { supabase, STORAGE_BUCKETS, getPublicUrl } from '@/lib/supabase';
+import { getSupabase, STORAGE_BUCKETS, getPublicUrl } from '@/lib/supabase';
 
 interface RouteParams {
   params: Promise<{ testId: string }>;
@@ -126,7 +126,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const storagePath = `${testId}/${timestamp}.${extension}`;
 
     // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const { data: uploadData, error: uploadError } = await getSupabase().storage
       .from(STORAGE_BUCKETS.SITE_IMAGES)
       .upload(storagePath, file, {
         cacheControl: '3600',

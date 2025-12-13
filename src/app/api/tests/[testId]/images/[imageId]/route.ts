@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { supabase, STORAGE_BUCKETS, getPublicUrl } from '@/lib/supabase';
+import { getSupabase, STORAGE_BUCKETS, getPublicUrl } from '@/lib/supabase';
 
 interface RouteParams {
   params: Promise<{ testId: string; imageId: string }>;
@@ -105,7 +105,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     // Delete from Supabase Storage
-    const { error: deleteError } = await supabase.storage
+    const { error: deleteError } = await getSupabase().storage
       .from(STORAGE_BUCKETS.SITE_IMAGES)
       .remove([image.storagePath]);
 
