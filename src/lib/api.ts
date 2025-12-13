@@ -33,6 +33,7 @@ export interface ApiTest {
   testType: TestType;
   reportNo: string | null;
   testDate: string;
+  dateOfCasting: string | null;
   pileId: string;
   pileDiameterMm: number;
   pileDepthM: number;
@@ -148,6 +149,7 @@ export async function createTest(data: {
   testType: TestType;
   reportNo?: string;
   testDate?: string;
+  dateOfCasting?: string;
   pileId: string;
   pileDiameterMm: number;
   pileDepthM: number;

@@ -134,7 +134,7 @@ function apiTestToSavedTest(test: api.ApiTest): SavedTest {
     mixedDesign: test.concreteGrade,
     pileDiameter: test.pileDiameterMm.toString(),
     ramArea: test.ramAreaCm2.toString(),
-    dateOfCasting: '',
+    dateOfCasting: test.dateOfCasting ? test.dateOfCasting.split('T')[0] : '',
     pileDepth: test.pileDepthM.toString(),
     testType: test.testType,
   };
@@ -391,6 +391,7 @@ export const useTestStore = create<TestState & TestActions>()((set, get) => ({
           testType: projectInfo.testType || 'IVPLT',
           reportNo: projectInfo.reportNo || undefined,
           testDate: projectInfo.testDate || undefined,
+          dateOfCasting: projectInfo.dateOfCasting || undefined,
           pileId: projectInfo.pileId,
           pileDiameterMm: parseFloat(projectInfo.pileDiameter) || 600,
           pileDepthM: parseFloat(projectInfo.pileDepth) || 10,
@@ -412,6 +413,7 @@ export const useTestStore = create<TestState & TestActions>()((set, get) => ({
         await api.updateTest(testId, {
           reportNo: projectInfo.reportNo || null,
           testDate: projectInfo.testDate || undefined,
+          dateOfCasting: projectInfo.dateOfCasting || null,
           pileId: projectInfo.pileId,
           pileDiameterMm: parseFloat(projectInfo.pileDiameter) || 600,
           pileDepthM: parseFloat(projectInfo.pileDepth) || 10,

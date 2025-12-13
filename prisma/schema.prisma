@@ -82,6 +82,7 @@ model Test {
   testType        TestType   @default(IVPLT)
   reportNo        String?    // User-defined report number
   testDate        DateTime   @default(now())
+  dateOfCasting   DateTime?  // Date when the pile was cast
 
   // Pile specifications
   pileId          String     // e.g., "TP-02"

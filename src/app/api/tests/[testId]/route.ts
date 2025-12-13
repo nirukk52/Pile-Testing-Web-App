@@ -83,9 +83,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Convert date string to Date
+    // Convert date strings to Date
     if (body.testDate) {
       body.testDate = new Date(body.testDate);
+    }
+    if (body.dateOfCasting) {
+      body.dateOfCasting = new Date(body.dateOfCasting);
     }
 
     const test = await prisma.test.update({
