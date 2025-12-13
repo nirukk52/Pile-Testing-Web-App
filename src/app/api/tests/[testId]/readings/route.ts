@@ -226,22 +226,34 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Get existing reading
-    const existingReading = await prisma.reading.findUnique({
-      where: { id: readingId },
+    // Get existing reading and verify it belongs to this test
+    const existingReading = await prisma.reading.findFirst({
+      where: { 
+        id: readingId,
+        testId, // Ensure reading belongs to the test from URL
+      },
     });
 
     if (!existingReading) {
       return NextResponse.json(
-        { error: 'Reading not found' },
+        { error: 'Reading not found or does not belong to this test' },
         { status: 404 }
       );
     }
 
     // Calculate or use override for load
+    // Why: Validate override values to prevent NaN from corrupting data.
     let loadT: number;
     if (loadOverride !== undefined && loadOverride !== null) {
-      loadT = parseFloat(loadOverride);
+      const parsedOverride = typeof loadOverride === 'number' ? loadOverride : parseFloat(loadOverride);
+      if (!isNaN(parsedOverride) && isFinite(parsedOverride)) {
+        loadT = parsedOverride;
+      } else if (pressureKgCm2 !== undefined) {
+        // Invalid override, fall back to calculation
+        loadT = calculateLoadFromPressure(parseFloat(pressureKgCm2), test.ramAreaCm2);
+      } else {
+        loadT = existingReading.loadT;
+      }
     } else if (pressureKgCm2 !== undefined) {
       loadT = calculateLoadFromPressure(parseFloat(pressureKgCm2), test.ramAreaCm2);
     } else {
@@ -249,9 +261,27 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     // Calculate or use override for average settlement
+    // Why: Validate override values to prevent NaN from corrupting data.
     let avgSettlementMm: number;
     if (avgOverride !== undefined && avgOverride !== null) {
-      avgSettlementMm = parseFloat(avgOverride);
+      const parsedOverride = typeof avgOverride === 'number' ? avgOverride : parseFloat(avgOverride);
+      if (!isNaN(parsedOverride) && isFinite(parsedOverride)) {
+        avgSettlementMm = parsedOverride;
+      } else if (dg1 !== undefined && dg2 !== undefined && dg3 !== undefined && dg4 !== undefined) {
+        // Invalid override, fall back to calculation
+        avgSettlementMm = calculateAverageSettlement(
+          parseFloat(dg1),
+          parseFloat(dg2),
+          parseFloat(dg3),
+          parseFloat(dg4),
+          dg1Enabled ?? existingReading.dg1Enabled,
+          dg2Enabled ?? existingReading.dg2Enabled,
+          dg3Enabled ?? existingReading.dg3Enabled,
+          dg4Enabled ?? existingReading.dg4Enabled
+        );
+      } else {
+        avgSettlementMm = existingReading.avgSettlementMm;
+      }
     } else if (dg1 !== undefined && dg2 !== undefined && dg3 !== undefined && dg4 !== undefined) {
       avgSettlementMm = calculateAverageSettlement(
         parseFloat(dg1),
@@ -267,7 +297,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       avgSettlementMm = existingReading.avgSettlementMm;
     }
 
-    // Update the reading
+    // Update the reading (testId ownership already validated above via findFirst)
     const reading = await prisma.reading.update({
       where: { id: readingId },
       data: {

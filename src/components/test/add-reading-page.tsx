@@ -97,9 +97,31 @@ export function AddReadingPage({ onSave, onCancel, projectInfo, editData }: AddR
   const [confirmed, setConfirmed] = useState(false);
   const [phase, setPhase] = useState<LegacyTestPhase>(editData?.phase || 'loading');
   
-  // Override states for edit mode
-  const [useLoadOverride, setUseLoadOverride] = useState(false);
-  const [loadOverrideValue, setLoadOverrideValue] = useState(editData?.load || '');
+  // Detect if existing reading had manual overrides by comparing stored vs calculated values
+  // Why: Preserve manual corrections when editing to prevent accidental recalculation.
+  const detectExistingOverrides = () => {
+    if (!editData) return { hasLoadOverride: false, storedLoad: '' };
+    
+    // Calculate what load SHOULD be from stored pressure
+    const expectedLoad = calculateLoad(editData.pressureGauge, projectInfo.ramArea);
+    const storedLoad = parseFloat(editData.load);
+    const expectedLoadNum = parseFloat(expectedLoad);
+    
+    // Detect load override: if stored differs from calculated beyond rounding tolerance
+    const hasLoadOverride = !isNaN(storedLoad) && !isNaN(expectedLoadNum) && 
+      Math.abs(storedLoad - expectedLoadNum) > 0.01; // Allow 0.01 MT tolerance for rounding
+    
+    return { 
+      hasLoadOverride, 
+      storedLoad: editData.load || ''
+    };
+  };
+
+  const existingOverrides = detectExistingOverrides();
+  
+  // Override states for edit mode - initialize based on detected overrides
+  const [useLoadOverride, setUseLoadOverride] = useState(existingOverrides.hasLoadOverride);
+  const [loadOverrideValue, setLoadOverrideValue] = useState(existingOverrides.storedLoad);
   const [useAvgOverride, setUseAvgOverride] = useState(false);
   const [avgOverrideValue, setAvgOverrideValue] = useState('');
 
@@ -146,6 +168,23 @@ export function AddReadingPage({ onSave, onCancel, projectInfo, editData }: AddR
 
   const handleSave = () => {
     if (isFormValid()) {
+      // Validate override values - only use if valid number
+      let loadOverride: number | undefined;
+      if (useLoadOverride && loadOverrideValue.trim() !== '') {
+        const parsed = parseFloat(loadOverrideValue);
+        if (!isNaN(parsed) && isFinite(parsed)) {
+          loadOverride = parsed;
+        }
+      }
+
+      let avgOverride: number | undefined;
+      if (useAvgOverride && avgOverrideValue.trim() !== '') {
+        const parsed = parseFloat(avgOverrideValue);
+        if (!isNaN(parsed) && isFinite(parsed)) {
+          avgOverride = parsed;
+        }
+      }
+
       onSave({
         date,
         time,
@@ -161,8 +200,8 @@ export function AddReadingPage({ onSave, onCancel, projectInfo, editData }: AddR
         remark,
         signature,
         phase,
-        loadOverride: useLoadOverride ? parseFloat(loadOverrideValue) : undefined,
-        avgOverride: useAvgOverride ? parseFloat(avgOverrideValue) : undefined,
+        loadOverride,
+        avgOverride,
       });
     }
   };

@@ -264,7 +264,10 @@ export function DataEntry({
     if (!editingEntry) return;
 
     const timestamp = new Date(`${data.date}T${data.time}`).toISOString();
-    const load = data.loadOverride?.toString() || calculateLoad(data.pressure, projectInfo.ramArea);
+    // Use override only if it's a valid number, otherwise calculate
+    const load = (data.loadOverride !== undefined && !isNaN(data.loadOverride) && isFinite(data.loadOverride))
+      ? data.loadOverride.toString()
+      : calculateLoad(data.pressure, projectInfo.ramArea);
     const originalReadingId = editingEntry.entry.readings[0].id;
 
     const updatedReading: LegacyReading = {
