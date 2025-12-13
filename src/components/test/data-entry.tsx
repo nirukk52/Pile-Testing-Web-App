@@ -163,10 +163,15 @@ export function DataEntry({
   const [validationError, setValidationError] = useState<string | null>(null);
 
   // Reset quick form when loadEntries change (after successful add)
+  // Preserve date/time - user likely wants to continue with same date on site
   useEffect(() => {
     const newDefaults = getDefaultsFromLastReading(loadEntries);
-    setQDate(newDefaults.date);
-    setQTime(newDefaults.time);
+    // Only update date/time on FIRST render (when no entries exist yet)
+    // After that, preserve user's entered date/time
+    if (loadEntries.length === 0) {
+      setQDate(newDefaults.date);
+      setQTime(newDefaults.time);
+    }
     setQPhase(newDefaults.phase);
     setQPressure(newDefaults.pressure);
     // Keep dial gauges empty for new reading
