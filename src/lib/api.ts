@@ -247,6 +247,42 @@ export async function createReading(
 }
 
 /**
+ * Update an existing reading
+ * Why: Allows site engineers to edit readings, including manual load/avg overrides.
+ */
+export async function updateReading(
+  testId: string,
+  readingId: string,
+  data: {
+    phase?: TestPhase;
+    recordedAt?: string;
+    pressureKgCm2?: number;
+    dg1?: number;
+    dg2?: number;
+    dg3?: number;
+    dg4?: number;
+    dg1Enabled?: boolean;
+    dg2Enabled?: boolean;
+    dg3Enabled?: boolean;
+    dg4Enabled?: boolean;
+    remark?: string;
+    loadOverride?: number;    // Manual load override (MT)
+    avgOverride?: number;     // Manual avg settlement override (mm)
+  }
+): Promise<ApiReading> {
+  const response = await fetch(`/api/tests/${testId}/readings?id=${readingId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to update reading');
+  }
+  return response.json();
+}
+
+/**
  * Delete a reading
  */
 export async function deleteReading(testId: string, readingId: string): Promise<void> {

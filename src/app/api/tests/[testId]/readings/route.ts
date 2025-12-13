@@ -168,6 +168,137 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 }
 
 /**
+ * PUT /api/tests/[testId]/readings - Update a reading by ID (via query param)
+ * Why: User wants to edit a specific reading, including optional load/avg overrides.
+ */
+export async function PUT(request: NextRequest, { params }: RouteParams) {
+  try {
+    const { testId } = await params;
+    const { searchParams } = new URL(request.url);
+    const readingId = searchParams.get('id');
+    const body = await request.json();
+
+    if (!readingId) {
+      return NextResponse.json(
+        { error: 'Reading ID required' },
+        { status: 400 }
+      );
+    }
+
+    const {
+      phase,
+      recordedAt,
+      pressureKgCm2,
+      dg1,
+      dg2,
+      dg3,
+      dg4,
+      dg1Enabled,
+      dg2Enabled,
+      dg3Enabled,
+      dg4Enabled,
+      remark,
+      loadOverride,       // Optional: manual load override (MT)
+      avgOverride,        // Optional: manual avg settlement override (mm)
+    } = body;
+
+    // Validate at least one gauge is enabled if gauge states are provided
+    if (dg1Enabled !== undefined && dg2Enabled !== undefined && 
+        dg3Enabled !== undefined && dg4Enabled !== undefined) {
+      if (!dg1Enabled && !dg2Enabled && !dg3Enabled && !dg4Enabled) {
+        return NextResponse.json(
+          { error: 'At least one dial gauge must be enabled' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Get test to calculate load from pressure
+    const test = await prisma.test.findUnique({
+      where: { id: testId },
+      select: { ramAreaCm2: true },
+    });
+
+    if (!test) {
+      return NextResponse.json(
+        { error: 'Test not found' },
+        { status: 404 }
+      );
+    }
+
+    // Get existing reading
+    const existingReading = await prisma.reading.findUnique({
+      where: { id: readingId },
+    });
+
+    if (!existingReading) {
+      return NextResponse.json(
+        { error: 'Reading not found' },
+        { status: 404 }
+      );
+    }
+
+    // Calculate or use override for load
+    let loadT: number;
+    if (loadOverride !== undefined && loadOverride !== null) {
+      loadT = parseFloat(loadOverride);
+    } else if (pressureKgCm2 !== undefined) {
+      loadT = calculateLoadFromPressure(parseFloat(pressureKgCm2), test.ramAreaCm2);
+    } else {
+      loadT = existingReading.loadT;
+    }
+
+    // Calculate or use override for average settlement
+    let avgSettlementMm: number;
+    if (avgOverride !== undefined && avgOverride !== null) {
+      avgSettlementMm = parseFloat(avgOverride);
+    } else if (dg1 !== undefined && dg2 !== undefined && dg3 !== undefined && dg4 !== undefined) {
+      avgSettlementMm = calculateAverageSettlement(
+        parseFloat(dg1),
+        parseFloat(dg2),
+        parseFloat(dg3),
+        parseFloat(dg4),
+        dg1Enabled ?? existingReading.dg1Enabled,
+        dg2Enabled ?? existingReading.dg2Enabled,
+        dg3Enabled ?? existingReading.dg3Enabled,
+        dg4Enabled ?? existingReading.dg4Enabled
+      );
+    } else {
+      avgSettlementMm = existingReading.avgSettlementMm;
+    }
+
+    // Update the reading
+    const reading = await prisma.reading.update({
+      where: { id: readingId },
+      data: {
+        phase: phase as TestPhase ?? existingReading.phase,
+        recordedAt: recordedAt ? new Date(recordedAt) : existingReading.recordedAt,
+        pressureKgCm2: pressureKgCm2 !== undefined ? parseFloat(pressureKgCm2) : existingReading.pressureKgCm2,
+        loadT,
+        dg1: dg1 !== undefined ? parseFloat(dg1) : existingReading.dg1,
+        dg2: dg2 !== undefined ? parseFloat(dg2) : existingReading.dg2,
+        dg3: dg3 !== undefined ? parseFloat(dg3) : existingReading.dg3,
+        dg4: dg4 !== undefined ? parseFloat(dg4) : existingReading.dg4,
+        dg1Enabled: dg1Enabled ?? existingReading.dg1Enabled,
+        dg2Enabled: dg2Enabled ?? existingReading.dg2Enabled,
+        dg3Enabled: dg3Enabled ?? existingReading.dg3Enabled,
+        dg4Enabled: dg4Enabled ?? existingReading.dg4Enabled,
+        avgSettlementMm,
+        remark: remark !== undefined ? (remark || null) : existingReading.remark,
+      },
+    });
+
+    return NextResponse.json(reading);
+  } catch (error) {
+    console.error('Failed to update reading:', error);
+    return NextResponse.json(
+      { error: 'Failed to update reading' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
  * DELETE /api/tests/[testId]/readings - Delete a reading by ID (via query param)
  * Why: User wants to remove a specific reading.
  */

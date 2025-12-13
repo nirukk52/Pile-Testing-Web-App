@@ -3,6 +3,7 @@
 import { useState, Fragment, useEffect } from 'react';
 import { Plus, Trash2, Pencil, Loader2, Cloud, CloudOff } from 'lucide-react';
 import { AddReadingPage, type NewReadingData } from './add-reading-page';
+import { DeleteConfirmationModal } from './delete-confirmation-modal';
 import type { LoadEntry, LegacyReading, LegacyProjectInfo, LegacyTestPhase } from '@/types';
 import { calculateLoad, calculateAverageSettlement } from '@/types';
 import { useApiSync } from '@/store/test-store';
@@ -16,6 +17,7 @@ interface DataEntryProps {
   loadEntries: LoadEntry[];
   onAddEntry: (entry: LoadEntry, insertAtIndex?: number) => void;
   onDeleteEntry: (entryId: string) => void;
+  onUpdateEntry: (entryId: string, reading: LegacyReading) => void;
   projectInfo: LegacyProjectInfo;
 }
 
@@ -67,12 +69,20 @@ export function DataEntry({
   loadEntries,
   onAddEntry,
   onDeleteEntry,
+  onUpdateEntry,
   projectInfo,
 }: DataEntryProps) {
   const [showAddReading, setShowAddReading] = useState(false);
   const [insertAtIndex, setInsertAtIndex] = useState<number | undefined>(undefined);
   const [isSaving, setIsSaving] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
+
+  // Edit mode state
+  const [editingEntry, setEditingEntry] = useState<{ entry: LoadEntry; index: number } | null>(null);
+
+  // Delete confirmation state
+  const [deleteTarget, setDeleteTarget] = useState<{ entryId: string; readingId: string; time: string; load: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Quick form state
   const defaults = getDefaultsFromLastReading(loadEntries);
@@ -103,7 +113,7 @@ export function DataEntry({
     setValidationError(null);
   }, [loadEntries.length]);
 
-  const { addReadingToApi, deleteReadingFromApi, saveTestToApi } = useApiSync();
+  const { addReadingToApi, updateReadingToApi, deleteReadingFromApi, saveTestToApi, updateLoadEntry } = useApiSync();
 
   /**
    * Validates the quick form.
@@ -193,7 +203,7 @@ export function DataEntry({
 
   const handleSaveReading = async (data: NewReadingData) => {
     const timestamp = new Date(`${data.date}T${data.time}`).toISOString();
-    const load = calculateLoad(data.pressure, projectInfo.ramArea);
+    const load = data.loadOverride?.toString() || calculateLoad(data.pressure, projectInfo.ramArea);
     const tempId = Date.now().toString();
 
     const newReading: LegacyReading = {
@@ -246,16 +256,82 @@ export function DataEntry({
     }
   };
 
-  const handleDeleteReading = async (entryId: string, readingId: string) => {
-    if (confirm('Delete this reading?')) {
-      onDeleteEntry(entryId);
-      
-      // Delete from API
-      try {
-        await deleteReadingFromApi(readingId);
-      } catch (error) {
-        console.error('Failed to delete from API:', error);
-      }
+  /**
+   * Handle saving edited reading.
+   * Why: Updates existing reading with potential load/avg overrides.
+   */
+  const handleSaveEditedReading = async (data: NewReadingData) => {
+    if (!editingEntry) return;
+
+    const timestamp = new Date(`${data.date}T${data.time}`).toISOString();
+    const load = data.loadOverride?.toString() || calculateLoad(data.pressure, projectInfo.ramArea);
+    const originalReadingId = editingEntry.entry.readings[0].id;
+
+    const updatedReading: LegacyReading = {
+      id: originalReadingId,
+      pressureGauge: data.pressure,
+      load,
+      dialGauge1: data.dialGauge1,
+      dialGauge2: data.dialGauge2,
+      dialGauge3: data.dialGauge3,
+      dialGauge4: data.dialGauge4,
+      dg1Enabled: data.dg1Enabled,
+      dg2Enabled: data.dg2Enabled,
+      dg3Enabled: data.dg3Enabled,
+      dg4Enabled: data.dg4Enabled,
+      timestamp,
+      signature: data.signature,
+      remark: data.remark,
+      phase: data.phase,
+    };
+
+    // Update local state immediately for optimistic update
+    onUpdateEntry(editingEntry.entry.id, updatedReading);
+    setEditingEntry(null);
+
+    // Sync to API in background
+    setIsSaving(true);
+    setSyncStatus('syncing');
+    try {
+      await updateReadingToApi(originalReadingId, updatedReading, data.loadOverride, data.avgOverride);
+      setSyncStatus('synced');
+      setTimeout(() => setSyncStatus('idle'), 2000);
+    } catch (error) {
+      console.error('Failed to update reading in API:', error);
+      setSyncStatus('error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  /**
+   * Handle delete confirmation.
+   * Why: Shows modal with reading details before deletion.
+   */
+  const handleDeleteClick = (entryId: string, readingId: string, time: string, load: string) => {
+    setDeleteTarget({ entryId, readingId, time, load });
+  };
+
+  /**
+   * Confirm and execute delete.
+   * Why: Actually performs the deletion after user confirmation.
+   */
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+
+    setIsDeleting(true);
+    
+    // Delete from local state first
+    onDeleteEntry(deleteTarget.entryId);
+    
+    // Delete from API
+    try {
+      await deleteReadingFromApi(deleteTarget.readingId);
+    } catch (error) {
+      console.error('Failed to delete from API:', error);
+    } finally {
+      setIsDeleting(false);
+      setDeleteTarget(null);
     }
   };
 
@@ -264,10 +340,15 @@ export function DataEntry({
     setShowAddReading(true);
   };
 
-  const handleEditReading = () => {
-    alert('Edit functionality coming soon!');
+  /**
+   * Handle edit button click.
+   * Why: Opens edit page with existing reading data pre-filled.
+   */
+  const handleEditReading = (entry: LoadEntry, index: number) => {
+    setEditingEntry({ entry, index });
   };
 
+  // Show Add Reading Page (new)
   if (showAddReading) {
     return (
       <AddReadingPage
@@ -281,8 +362,31 @@ export function DataEntry({
     );
   }
 
+  // Show Edit Reading Page
+  if (editingEntry) {
+    return (
+      <AddReadingPage
+        onSave={handleSaveEditedReading}
+        onCancel={() => setEditingEntry(null)}
+        projectInfo={projectInfo}
+        editData={editingEntry.entry.readings[0]}
+      />
+    );
+  }
+
   return (
     <div className="p-2 space-y-3">
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <DeleteConfirmationModal
+          time={deleteTarget.time}
+          load={`${deleteTarget.load} MT`}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setDeleteTarget(null)}
+          isDeleting={isDeleting}
+        />
+      )}
+
       {/* Sync Status */}
       {syncStatus !== 'idle' && (
         <div className={`rounded-lg px-3 py-2 flex items-center gap-2 text-sm ${
@@ -374,6 +478,12 @@ export function DataEntry({
                     hour: '2-digit',
                     minute: '2-digit',
                     hour12: false,
+                  });
+                  // Format time for delete modal (12h format)
+                  const timeStr12h = loadDate.toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: true,
                   });
 
                   const avg = calculateAverageSettlement(
@@ -467,8 +577,8 @@ export function DataEntry({
                               <span className="hidden sm:inline">Insert</span>
                             </button>
                             <button
-                              onClick={() => handleEditReading()}
-                              className="text-slate-600 hover:bg-slate-50 px-2 py-1 rounded transition-colors flex items-center gap-1 text-xs whitespace-nowrap"
+                              onClick={() => handleEditReading(entry, globalIndex)}
+                              className="text-amber-600 hover:bg-amber-50 px-2 py-1 rounded transition-colors flex items-center gap-1 text-xs whitespace-nowrap"
                             >
                               <Pencil className="w-3 h-3" />
                               <span className="hidden sm:inline">Edit</span>
@@ -477,7 +587,7 @@ export function DataEntry({
                         </td>
                         <td className="px-2 py-2 text-center">
                           <button
-                            onClick={() => handleDeleteReading(entry.id, reading.id)}
+                            onClick={() => handleDeleteClick(entry.id, reading.id, timeStr12h, entry.load)}
                             className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
                           >
                             <Trash2 className="w-3 h-3" />

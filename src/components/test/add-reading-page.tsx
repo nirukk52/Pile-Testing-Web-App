@@ -1,14 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, ArrowLeft, PenTool, AlertTriangle } from 'lucide-react';
-import type { LegacyProjectInfo, LegacyTestPhase } from '@/types';
+import { Check, ArrowLeft, PenTool, AlertTriangle, Edit3 } from 'lucide-react';
+import type { LegacyProjectInfo, LegacyTestPhase, LegacyReading } from '@/types';
 import { calculateLoad } from '@/types';
 import { convertISOToDDMMYYYY, convertDDMMYYYYToISO } from '@/lib/utils';
 
 /**
- * Data structure for a new reading.
- * Why: Defines all fields captured when adding a reading.
+ * Data structure for a new/edited reading.
+ * Why: Defines all fields captured when adding or editing a reading.
  */
 export interface NewReadingData {
   date: string;
@@ -25,16 +25,20 @@ export interface NewReadingData {
   remark: string;
   signature: string;
   phase: LegacyTestPhase;
+  loadOverride?: number;  // Manual load override (MT)
+  avgOverride?: number;   // Manual avg settlement override (mm)
 }
 
 /**
  * Props for the AddReadingPage component.
- * Why: Defines callbacks and context data.
+ * Why: Defines callbacks and context data, including edit mode support.
  */
 interface AddReadingPageProps {
   onSave: (data: NewReadingData) => void;
   onCancel: () => void;
   projectInfo: LegacyProjectInfo;
+  /** Optional: Existing reading data for edit mode */
+  editData?: LegacyReading;
 }
 
 /**
@@ -62,32 +66,53 @@ function calculateAverageWithEnabled(
 }
 
 /**
- * Full-page form for adding a single reading.
+ * Full-page form for adding or editing a single reading.
  * Why: Dedicated screen for accurate data entry with validation.
+ * Supports edit mode with load/avg override capability for corrections.
  */
-export function AddReadingPage({ onSave, onCancel, projectInfo }: AddReadingPageProps) {
+export function AddReadingPage({ onSave, onCancel, projectInfo, editData }: AddReadingPageProps) {
+  const isEditMode = !!editData;
+  
+  // Initialize state from editData if in edit mode, otherwise use defaults
   const now = new Date();
-  const [date, setDate] = useState(now.toISOString().split('T')[0]);
-  const [time, setTime] = useState(now.toTimeString().slice(0, 5));
-  const [pressure, setPressure] = useState('');
-  const [dialGauge1, setDialGauge1] = useState('');
-  const [dialGauge2, setDialGauge2] = useState('');
-  const [dialGauge3, setDialGauge3] = useState('');
-  const [dialGauge4, setDialGauge4] = useState('');
-  const [dg1Enabled, setDg1Enabled] = useState(true);
-  const [dg2Enabled, setDg2Enabled] = useState(true);
-  const [dg3Enabled, setDg3Enabled] = useState(true);
-  const [dg4Enabled, setDg4Enabled] = useState(true);
-  const [remark, setRemark] = useState('');
+  const editTimestamp = editData ? new Date(editData.timestamp) : null;
+  
+  const [date, setDate] = useState(
+    editTimestamp ? editTimestamp.toISOString().split('T')[0] : now.toISOString().split('T')[0]
+  );
+  const [time, setTime] = useState(
+    editTimestamp ? editTimestamp.toTimeString().slice(0, 5) : now.toTimeString().slice(0, 5)
+  );
+  const [pressure, setPressure] = useState(editData?.pressureGauge || '');
+  const [dialGauge1, setDialGauge1] = useState(editData?.dialGauge1 || '');
+  const [dialGauge2, setDialGauge2] = useState(editData?.dialGauge2 || '');
+  const [dialGauge3, setDialGauge3] = useState(editData?.dialGauge3 || '');
+  const [dialGauge4, setDialGauge4] = useState(editData?.dialGauge4 || '');
+  const [dg1Enabled, setDg1Enabled] = useState(editData?.dg1Enabled ?? true);
+  const [dg2Enabled, setDg2Enabled] = useState(editData?.dg2Enabled ?? true);
+  const [dg3Enabled, setDg3Enabled] = useState(editData?.dg3Enabled ?? true);
+  const [dg4Enabled, setDg4Enabled] = useState(editData?.dg4Enabled ?? true);
+  const [remark, setRemark] = useState(editData?.remark || '');
   const [signature, setSignature] = useState('');
   const [confirmed, setConfirmed] = useState(false);
-  const [phase, setPhase] = useState<LegacyTestPhase>('loading');
+  const [phase, setPhase] = useState<LegacyTestPhase>(editData?.phase || 'loading');
+  
+  // Override states for edit mode
+  const [useLoadOverride, setUseLoadOverride] = useState(false);
+  const [loadOverrideValue, setLoadOverrideValue] = useState(editData?.load || '');
+  const [useAvgOverride, setUseAvgOverride] = useState(false);
+  const [avgOverrideValue, setAvgOverrideValue] = useState('');
 
-  const load = calculateLoad(pressure, projectInfo.ramArea);
-  const average = calculateAverageWithEnabled(
+  // Calculate values
+  const calculatedLoad = calculateLoad(pressure, projectInfo.ramArea);
+  const calculatedAverage = calculateAverageWithEnabled(
     dialGauge1, dialGauge2, dialGauge3, dialGauge4,
     dg1Enabled, dg2Enabled, dg3Enabled, dg4Enabled
   );
+
+  // Display values (use override if enabled, otherwise calculated)
+  const displayLoad = useLoadOverride ? loadOverrideValue : calculatedLoad;
+  const displayAverage = useAvgOverride ? avgOverrideValue : calculatedAverage;
 
   // Count enabled gauges
   const enabledCount = [dg1Enabled, dg2Enabled, dg3Enabled, dg4Enabled].filter(Boolean).length;
@@ -136,6 +161,8 @@ export function AddReadingPage({ onSave, onCancel, projectInfo }: AddReadingPage
         remark,
         signature,
         phase,
+        loadOverride: useLoadOverride ? parseFloat(loadOverrideValue) : undefined,
+        avgOverride: useAvgOverride ? parseFloat(avgOverrideValue) : undefined,
       });
     }
   };
@@ -194,21 +221,34 @@ export function AddReadingPage({ onSave, onCancel, projectInfo }: AddReadingPage
   return (
     <div className="fixed inset-0 bg-gray-100 z-50 overflow-y-auto">
       {/* Header */}
-      <header className="bg-slate-800 text-white sticky top-0 z-10 shadow-lg">
+      <header className={`${isEditMode ? 'bg-amber-700' : 'bg-slate-800'} text-white sticky top-0 z-10 shadow-lg`}>
         <div className="flex items-center justify-between px-4 py-4">
           <button
             onClick={onCancel}
-            className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+            className={`p-2 ${isEditMode ? 'hover:bg-amber-600' : 'hover:bg-slate-700'} rounded-lg transition-colors`}
           >
             <ArrowLeft className="w-6 h-6" />
           </button>
-          <h1 className="flex-1 text-center text-white font-semibold">Add New Reading</h1>
+          <h1 className="flex-1 text-center text-white font-semibold flex items-center justify-center gap-2">
+            {isEditMode && <Edit3 className="w-5 h-5" />}
+            {isEditMode ? 'Edit Reading' : 'Add New Reading'}
+          </h1>
           <div className="w-10" />
         </div>
       </header>
 
       {/* Content */}
       <main className="p-4 space-y-4 pb-24">
+        {/* Edit Mode Banner */}
+        {isEditMode && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2">
+            <Edit3 className="w-5 h-5 text-amber-600" />
+            <span className="text-amber-800 text-sm">
+              Editing existing reading. You can override calculated values if needed.
+            </span>
+          </div>
+        )}
+
         {/* Date & Time Card */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
           <h2 className="text-slate-800 font-semibold">Date & Time</h2>
@@ -271,13 +311,46 @@ export function AddReadingPage({ onSave, onCancel, projectInfo }: AddReadingPage
             />
           </div>
 
-          {/* Calculated Load Display */}
+          {/* Calculated/Override Load Display */}
           {pressure && (
-            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+            <div className={`rounded-lg p-4 border ${useLoadOverride ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200'}`}>
               <div className="flex justify-between items-center">
-                <span className="text-blue-700">Calculated Load:</span>
-                <span className="text-blue-900 font-semibold text-lg">{load} MT</span>
+                <div className="flex items-center gap-2">
+                  <span className={useLoadOverride ? 'text-amber-700' : 'text-blue-700'}>
+                    {useLoadOverride ? 'Override Load:' : 'Calculated Load:'}
+                  </span>
+                  {isEditMode && (
+                    <button
+                      type="button"
+                      onClick={() => setUseLoadOverride(!useLoadOverride)}
+                      className={`text-xs px-2 py-1 rounded font-medium transition-colors ${
+                        useLoadOverride
+                          ? 'bg-amber-200 text-amber-800 hover:bg-amber-300'
+                          : 'bg-blue-200 text-blue-800 hover:bg-blue-300'
+                      }`}
+                    >
+                      {useLoadOverride ? 'Use Calculated' : 'Override'}
+                    </button>
+                  )}
+                </div>
+                {useLoadOverride ? (
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={loadOverrideValue}
+                    onChange={(e) => setLoadOverrideValue(e.target.value)}
+                    placeholder="0.00"
+                    className="w-24 h-8 px-2 text-right font-semibold text-lg text-amber-900 rounded border border-amber-300 focus:border-amber-500 focus:ring-1 focus:ring-amber-200 outline-none"
+                  />
+                ) : (
+                  <span className="text-blue-900 font-semibold text-lg">{calculatedLoad} MT</span>
+                )}
               </div>
+              {useLoadOverride && (
+                <p className="text-xs text-amber-600 mt-2">
+                  Calculated value: {calculatedLoad} MT (overridden)
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -309,20 +382,56 @@ export function AddReadingPage({ onSave, onCancel, projectInfo }: AddReadingPage
             {renderGaugeInput('R4 (mm)', dialGauge4, setDialGauge4, dg4Enabled, setDg4Enabled)}
           </div>
 
-          {/* Average Display */}
-          {enabledCount > 0 && average !== '-' && (
-            <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+          {/* Average Display with Override */}
+          {enabledCount > 0 && calculatedAverage !== '-' && (
+            <div className={`rounded-lg p-4 border ${useAvgOverride ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
               <div className="flex justify-between items-center">
-                <div>
-                  <span className="text-green-700">Average Settlement:</span>
-                  {hasDisabledGauge && (
-                    <span className="text-green-600 text-xs ml-2">
-                      (from {enabledCount} gauge{enabledCount > 1 ? 's' : ''})
+                <div className="flex items-center gap-2">
+                  <div>
+                    <span className={useAvgOverride ? 'text-amber-700' : 'text-green-700'}>
+                      {useAvgOverride ? 'Override Average:' : 'Average Settlement:'}
                     </span>
+                    {hasDisabledGauge && !useAvgOverride && (
+                      <span className="text-green-600 text-xs ml-2">
+                        (from {enabledCount} gauge{enabledCount > 1 ? 's' : ''})
+                      </span>
+                    )}
+                  </div>
+                  {isEditMode && (
+                    <button
+                      type="button"
+                      onClick={() => setUseAvgOverride(!useAvgOverride)}
+                      className={`text-xs px-2 py-1 rounded font-medium transition-colors ${
+                        useAvgOverride
+                          ? 'bg-amber-200 text-amber-800 hover:bg-amber-300'
+                          : 'bg-green-200 text-green-800 hover:bg-green-300'
+                      }`}
+                    >
+                      {useAvgOverride ? 'Use Calculated' : 'Override'}
+                    </button>
                   )}
                 </div>
-                <span className="text-green-900 font-semibold text-lg">{average} mm</span>
+                {useAvgOverride ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={avgOverrideValue}
+                      onChange={(e) => setAvgOverrideValue(e.target.value)}
+                      placeholder="0.00"
+                      className="w-24 h-8 px-2 text-right font-semibold text-lg text-amber-900 rounded border border-amber-300 focus:border-amber-500 focus:ring-1 focus:ring-amber-200 outline-none"
+                    />
+                    <span className="text-amber-900 font-semibold">mm</span>
+                  </div>
+                ) : (
+                  <span className="text-green-900 font-semibold text-lg">{calculatedAverage} mm</span>
+                )}
               </div>
+              {useAvgOverride && (
+                <p className="text-xs text-amber-600 mt-2">
+                  Calculated value: {calculatedAverage} mm (overridden)
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -454,12 +563,14 @@ export function AddReadingPage({ onSave, onCancel, projectInfo }: AddReadingPage
             disabled={!isFormValid()}
             className={`flex-1 py-4 rounded-xl transition-all flex items-center justify-center gap-2 font-medium ${
               isFormValid()
-                ? 'bg-green-600 text-white hover:bg-green-700 active:scale-[0.98] shadow-lg'
+                ? isEditMode
+                  ? 'bg-amber-600 text-white hover:bg-amber-700 active:scale-[0.98] shadow-lg'
+                  : 'bg-green-600 text-white hover:bg-green-700 active:scale-[0.98] shadow-lg'
                 : 'bg-gray-200 text-gray-400 cursor-not-allowed'
             }`}
           >
             <Check className="w-5 h-5" />
-            <span>Confirm & Save</span>
+            <span>{isEditMode ? 'Save Changes' : 'Confirm & Save'}</span>
           </button>
         </div>
       </main>
