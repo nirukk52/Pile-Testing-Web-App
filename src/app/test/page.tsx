@@ -28,6 +28,7 @@ export default function TestPage() {
   const setCurrentStep = useTestStore((s) => s.setCurrentStep);
   const updateProjectField = useTestStore((s) => s.updateProjectField);
   const addLoadEntry = useTestStore((s) => s.addLoadEntry);
+  const updateLoadEntry = useTestStore((s) => s.updateLoadEntry);
   const deleteLoadEntry = useTestStore((s) => s.deleteLoadEntry);
   const backToHome = useTestStore((s) => s.backToHome);
   const setUserProfile = useTestStore((s) => s.setUserProfile);
@@ -133,6 +134,7 @@ export default function TestPage() {
           <DataEntry
             loadEntries={loadEntries}
             onAddEntry={addLoadEntry}
+            onUpdateEntry={updateLoadEntry}
             onDeleteEntry={deleteLoadEntry}
             projectInfo={projectInfo}
           />

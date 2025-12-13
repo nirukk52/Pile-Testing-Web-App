@@ -5,4 +5,5 @@
 export { ProjectDetails } from './project-details';
 export { DataEntry } from './data-entry';
 export { AddReadingPage } from './add-reading-page';
+export { DeleteConfirmationModal } from './delete-confirmation-modal';
 export { ReportView } from './report-view';

@@ -72,6 +72,7 @@ interface TestActions {
   // Load entries (local state for UI)
   setLoadEntries: (entries: LoadEntry[]) => void;
   addLoadEntry: (entry: LoadEntry, insertAtIndex?: number) => void;
+  updateLoadEntry: (entryId: string, reading: LegacyReading) => void;
   deleteLoadEntry: (entryId: string) => Promise<void>;
 
   // User profile
@@ -82,6 +83,7 @@ interface TestActions {
   loadTestsFromApi: () => Promise<void>;
   saveTestToApi: () => Promise<void>;
   addReadingToApi: (reading: LegacyReading) => Promise<api.ApiReading>;
+  updateReadingToApi: (readingId: string, reading: LegacyReading, loadOverride?: number, avgOverride?: number) => Promise<api.ApiReading>;
   deleteReadingFromApi: (readingId: string) => Promise<void>;
 
   // Helpers
@@ -161,6 +163,8 @@ function apiTestToSavedTest(test: api.ApiTest): SavedTest {
         dg2Enabled: reading.dg2Enabled,
         dg3Enabled: reading.dg3Enabled,
         dg4Enabled: reading.dg4Enabled,
+        // Preserve stored avg for detecting manual overrides when editing
+        avgSettlement: reading.avgSettlementMm.toFixed(2),
         timestamp: reading.recordedAt,
         remark: reading.remark || '',
         phase: phaseMap[reading.phase] || 'loading',
@@ -302,6 +306,23 @@ export const useTestStore = create<TestState & TestActions>()((set, get) => ({
       }
       return { loadEntries: entries };
     });
+  },
+
+  updateLoadEntry: (entryId, reading) => {
+    set((state) => ({
+      loadEntries: state.loadEntries.map((entry) => {
+        if (entry.id === entryId) {
+          return {
+            ...entry,
+            pressureGauge: reading.pressureGauge,
+            load: reading.load,
+            timestamp: reading.timestamp,
+            readings: [reading],
+          };
+        }
+        return entry;
+      }),
+    }));
   },
 
   deleteLoadEntry: async (entryId) => {
@@ -483,6 +504,39 @@ export const useTestStore = create<TestState & TestActions>()((set, get) => ({
     return apiReading;
   },
 
+  updateReadingToApi: async (readingId: string, reading: LegacyReading, loadOverride?: number, avgOverride?: number) => {
+    const { supabaseTestId } = get();
+    
+    if (!supabaseTestId) {
+      throw new Error('No test ID available. Cannot update reading.');
+    }
+
+    const phaseMap: Record<LegacyTestPhase, string> = {
+      loading: 'LOADING',
+      holding: 'HOLD',
+      unloading: 'UNLOADING',
+    };
+
+    const apiReading = await api.updateReading(supabaseTestId, readingId, {
+      phase: phaseMap[reading.phase] as api.ApiReading['phase'],
+      recordedAt: reading.timestamp,
+      pressureKgCm2: parseFloat(reading.pressureGauge),
+      dg1: parseFloat(reading.dialGauge1) || 0,
+      dg2: parseFloat(reading.dialGauge2) || 0,
+      dg3: parseFloat(reading.dialGauge3) || 0,
+      dg4: parseFloat(reading.dialGauge4) || 0,
+      dg1Enabled: reading.dg1Enabled ?? true,
+      dg2Enabled: reading.dg2Enabled ?? true,
+      dg3Enabled: reading.dg3Enabled ?? true,
+      dg4Enabled: reading.dg4Enabled ?? true,
+      remark: reading.remark || undefined,
+      loadOverride,
+      avgOverride,
+    });
+
+    return apiReading;
+  },
+
   deleteReadingFromApi: async (readingId: string) => {
     const { supabaseTestId } = get();
     if (!supabaseTestId) return;
@@ -548,7 +602,9 @@ export const useApiSync = () => {
   const loadTestsFromApi = useTestStore((s) => s.loadTestsFromApi);
   const saveTestToApi = useTestStore((s) => s.saveTestToApi);
   const addReadingToApi = useTestStore((s) => s.addReadingToApi);
+  const updateReadingToApi = useTestStore((s) => s.updateReadingToApi);
   const deleteReadingFromApi = useTestStore((s) => s.deleteReadingFromApi);
+  const updateLoadEntry = useTestStore((s) => s.updateLoadEntry);
   const isLoading = useTestStore((s) => s.isLoading);
   const error = useTestStore((s) => s.error);
   const setError = useTestStore((s) => s.setError);
@@ -557,7 +613,9 @@ export const useApiSync = () => {
     loadTestsFromApi, 
     saveTestToApi, 
     addReadingToApi, 
+    updateReadingToApi,
     deleteReadingFromApi,
+    updateLoadEntry,
     isLoading, 
     error,
     setError,
