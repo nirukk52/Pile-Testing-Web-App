@@ -394,11 +394,20 @@ export function DataEntry({
                     : null;
                   const dateChanged = prevDate && dateStr !== prevDate;
 
-                  // Check if next entry has different pressure
+                  // Check for pressure changes
+                  const prevPressure = prevEntry ? prevEntry.pressureGauge : null;
+                  const pressureChanged = !prevPressure || entry.pressureGauge !== prevPressure;
+
+                  // Check for load changes
+                  const prevLoad = prevEntry ? prevEntry.load : null;
+                  const loadChanged = !prevLoad || entry.load !== prevLoad;
+
+                  // Check if next entry has same pressure/load (to hide border)
                   const nextEntry =
                     globalIndex < loadEntries.length - 1 ? loadEntries[globalIndex + 1] : null;
                   const nextPressure = nextEntry ? nextEntry.pressureGauge : null;
-                  const pressureWillChange = nextPressure && entry.pressureGauge !== nextPressure;
+                  const nextLoad = nextEntry ? nextEntry.load : null;
+                  const sameAsNext = nextPressure === entry.pressureGauge && nextLoad === entry.load;
 
                   return (
                     <Fragment key={entry.id}>
@@ -415,16 +424,20 @@ export function DataEntry({
                       )}
 
                       {/* Data Row */}
-                      <tr className="border-b border-slate-200 hover:bg-slate-50">
+                      <tr className={`${
+                        sameAsNext ? 'border-b border-slate-100' : 'border-b border-slate-200'
+                      } hover:bg-slate-50 ${
+                        dateChanged || pressureChanged || loadChanged ? 'bg-blue-50/30' : ''
+                      }`}>
                         <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold">
                           {dateChanged || globalIndex === 0 ? dateStr : ''}
                         </td>
                         <td className="px-2 py-2 border-r border-slate-200 text-center">{timeStr}</td>
                         <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold">
-                          {entry.pressureGauge}
+                          {pressureChanged ? entry.pressureGauge : ''}
                         </td>
                         <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold text-blue-700">
-                          {entry.load}
+                          {loadChanged ? entry.load : ''}
                         </td>
                         <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold">
                           {reading.dialGauge1}
@@ -471,13 +484,6 @@ export function DataEntry({
                           </button>
                         </td>
                       </tr>
-
-                      {/* Empty separator row after pressure change */}
-                      {pressureWillChange && (
-                        <tr className="bg-slate-50">
-                          <td colSpan={12} className="py-2 border-b-2 border-slate-300"></td>
-                        </tr>
-                      )}
                     </Fragment>
                   );
                 })}
