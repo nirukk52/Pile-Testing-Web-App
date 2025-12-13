@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Fragment } from 'react';
+import { useState, Fragment, useEffect } from 'react';
 import { Plus, Trash2, Pencil, Loader2, Cloud, CloudOff } from 'lucide-react';
 import { AddReadingPage, type NewReadingData } from './add-reading-page';
 import type { LoadEntry, LegacyReading, LegacyProjectInfo, LegacyTestPhase } from '@/types';
@@ -22,15 +22,45 @@ interface DataEntryProps {
  * Phase configuration for visual styling.
  * Why: Consistent colors for loading/holding/unloading phases.
  */
-const phases: Array<{ key: LegacyTestPhase; label: string; color: string }> = [
-  { key: 'loading', label: 'LOADING', color: 'bg-blue-600' },
-  { key: 'holding', label: 'HOLDING', color: 'bg-amber-600' },
-  { key: 'unloading', label: 'UNLOADING', color: 'bg-green-600' },
+const phases: Array<{ key: LegacyTestPhase; label: string; color: string; bgLight: string }> = [
+  { key: 'loading', label: 'Loading', color: 'bg-blue-600', bgLight: 'bg-blue-50 border-blue-200 text-blue-700' },
+  { key: 'holding', label: 'Holding', color: 'bg-amber-600', bgLight: 'bg-amber-50 border-amber-200 text-amber-700' },
+  { key: 'unloading', label: 'Unloading', color: 'bg-green-600', bgLight: 'bg-green-50 border-green-200 text-green-700' },
 ];
 
 /**
- * Timeline/table view for all readings.
- * Why: Main data entry screen showing all recorded measurements.
+ * Get default values for quick form from the last reading.
+ * Why: Auto-fill saves time for site engineers entering sequential readings.
+ */
+function getDefaultsFromLastReading(loadEntries: LoadEntry[]) {
+  const now = new Date();
+  const defaultDate = now.toISOString().split('T')[0];
+  const defaultTime = now.toTimeString().slice(0, 5);
+
+  if (loadEntries.length === 0) {
+    return {
+      date: defaultDate,
+      time: defaultTime,
+      phase: 'loading' as LegacyTestPhase,
+      pressure: '',
+    };
+  }
+
+  const lastEntry = loadEntries[loadEntries.length - 1];
+  const lastReading = lastEntry.readings[0];
+  const lastDate = new Date(lastReading.timestamp);
+
+  return {
+    date: lastDate.toISOString().split('T')[0],
+    time: lastDate.toTimeString().slice(0, 5),
+    phase: lastReading.phase || 'loading',
+    pressure: lastEntry.pressureGauge,
+  };
+}
+
+/**
+ * Timeline/table view for all readings with quick-add form.
+ * Why: Main data entry screen for fast on-site measurement recording.
  */
 export function DataEntry({
   loadEntries,
@@ -42,8 +72,123 @@ export function DataEntry({
   const [insertAtIndex, setInsertAtIndex] = useState<number | undefined>(undefined);
   const [isSaving, setIsSaving] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
-  
+
+  // Quick form state
+  const defaults = getDefaultsFromLastReading(loadEntries);
+  const [qDate, setQDate] = useState(defaults.date);
+  const [qTime, setQTime] = useState(defaults.time);
+  const [qPhase, setQPhase] = useState<LegacyTestPhase>(defaults.phase);
+  const [qPressure, setQPressure] = useState(defaults.pressure);
+  const [qDg1, setQDg1] = useState('');
+  const [qDg2, setQDg2] = useState('');
+  const [qDg3, setQDg3] = useState('');
+  const [qDg4, setQDg4] = useState('');
+  const [qRemark, setQRemark] = useState('');
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Reset quick form when loadEntries change (after successful add)
+  useEffect(() => {
+    const newDefaults = getDefaultsFromLastReading(loadEntries);
+    setQDate(newDefaults.date);
+    setQTime(newDefaults.time);
+    setQPhase(newDefaults.phase);
+    setQPressure(newDefaults.pressure);
+    // Keep dial gauges empty for new reading
+    setQDg1('');
+    setQDg2('');
+    setQDg3('');
+    setQDg4('');
+    setQRemark('');
+    setValidationError(null);
+  }, [loadEntries.length]);
+
   const { addReadingToApi, deleteReadingFromApi, saveTestToApi } = useApiSync();
+
+  /**
+   * Validates the quick form.
+   * Why: Same validation as full page - required fields must be filled.
+   */
+  const validateQuickForm = (): boolean => {
+    // Check project details first
+    if (!projectInfo.project || !projectInfo.pileId) {
+      setValidationError('Please fill Project Name and Pile ID in the Details tab first');
+      return false;
+    }
+    if (!qDate) {
+      setValidationError('Date is required');
+      return false;
+    }
+    if (!qTime) {
+      setValidationError('Time is required');
+      return false;
+    }
+    if (!qPressure) {
+      setValidationError('Pressure is required');
+      return false;
+    }
+    if (!qDg1 || !qDg2 || !qDg3 || !qDg4) {
+      setValidationError('All dial gauge readings are required');
+      return false;
+    }
+    setValidationError(null);
+    return true;
+  };
+
+  /**
+   * Handle quick form submission.
+   * Why: One-tap add for fast data entry on site.
+   */
+  const handleQuickAdd = async () => {
+    if (!validateQuickForm()) return;
+
+    const timestamp = new Date(`${qDate}T${qTime}`).toISOString();
+    const load = calculateLoad(qPressure, projectInfo.ramArea);
+    const tempId = Date.now().toString();
+
+    const newReading: LegacyReading = {
+      id: tempId,
+      pressureGauge: qPressure,
+      load,
+      dialGauge1: qDg1,
+      dialGauge2: qDg2,
+      dialGauge3: qDg3,
+      dialGauge4: qDg4,
+      dg1Enabled: true,
+      dg2Enabled: true,
+      dg3Enabled: true,
+      dg4Enabled: true,
+      timestamp,
+      signature: '', // No signature for quick entry
+      remark: qRemark,
+      phase: qPhase,
+    };
+
+    const newEntry: LoadEntry = {
+      id: `entry-${tempId}`,
+      pressureGauge: qPressure,
+      load,
+      readings: [newReading],
+      timestamp,
+    };
+
+    // Add to local state immediately for optimistic update
+    onAddEntry(newEntry);
+
+    // Sync to API in background
+    setIsSaving(true);
+    setSyncStatus('syncing');
+    try {
+      await saveTestToApi();
+      await addReadingToApi(newReading);
+      setSyncStatus('synced');
+      setTimeout(() => setSyncStatus('idle'), 2000);
+    } catch (error) {
+      console.error('Failed to sync reading to API:', error);
+      setSyncStatus('error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleSaveReading = async (data: NewReadingData) => {
     const timestamp = new Date(`${data.date}T${data.time}`).toISOString();
@@ -115,11 +260,6 @@ export function DataEntry({
 
   const handleAddBetween = (index: number) => {
     setInsertAtIndex(index);
-    setShowAddReading(true);
-  };
-
-  const handleAddNew = () => {
-    setInsertAtIndex(undefined);
     setShowAddReading(true);
   };
 
@@ -360,19 +500,154 @@ export function DataEntry({
           </div>
           <h3 className="text-gray-900 font-semibold mb-1">No Readings Yet</h3>
           <p className="text-gray-500 text-sm">
-            Click &quot;Add Reading&quot; below to record your first measurement
+            Fill the form below to record your first measurement
           </p>
         </div>
       )}
 
-      {/* Main Add Reading Button */}
-      <button
-        onClick={handleAddNew}
-        className="w-full py-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg font-semibold"
-      >
-        <Plus className="w-5 h-5" />
-        <span>Add Reading</span>
-      </button>
+      {/* Quick Add Form */}
+      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 space-y-3">
+        {/* Validation Error */}
+        {validationError && (
+          <div className="bg-red-50 border border-red-200 rounded px-3 py-2 text-red-700 text-sm">
+            {validationError}
+          </div>
+        )}
+
+        {/* Row 1: Date & Time */}
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Date</label>
+            <input
+              type="date"
+              value={qDate}
+              onChange={(e) => setQDate(e.target.value)}
+              className="w-full h-10 px-2 text-sm rounded border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Time (24h)</label>
+            <input
+              type="text"
+              pattern="([01]?[0-9]|2[0-3]):[0-5][0-9]"
+              placeholder="HH:MM"
+              value={qTime}
+              onChange={(e) => setQTime(e.target.value)}
+              className="w-full h-10 px-2 text-sm rounded border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none"
+            />
+          </div>
+        </div>
+
+        {/* Row 2: Phase Selector */}
+        <div className="grid grid-cols-3 gap-1">
+          {phases.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => setQPhase(p.key)}
+              className={`py-2 text-xs font-medium rounded transition-all ${
+                qPhase === p.key
+                  ? `${p.color} text-white`
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Row 3: Pressure */}
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">Pressure (kg/cm²)</label>
+          <input
+            type="number"
+            step="0.01"
+            value={qPressure}
+            onChange={(e) => setQPressure(e.target.value)}
+            placeholder="e.g., 50.00"
+            className="w-full h-10 px-3 text-sm rounded border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none"
+          />
+        </div>
+
+        {/* Row 4: Dial Gauge Readings */}
+        <div className="grid grid-cols-4 gap-2">
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">R1</label>
+            <input
+              type="number"
+              step="0.01"
+              value={qDg1}
+              onChange={(e) => setQDg1(e.target.value)}
+              placeholder="0.00"
+              className="w-full h-10 px-2 text-sm rounded border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none text-center"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">R2</label>
+            <input
+              type="number"
+              step="0.01"
+              value={qDg2}
+              onChange={(e) => setQDg2(e.target.value)}
+              placeholder="0.00"
+              className="w-full h-10 px-2 text-sm rounded border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none text-center"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">R3</label>
+            <input
+              type="number"
+              step="0.01"
+              value={qDg3}
+              onChange={(e) => setQDg3(e.target.value)}
+              placeholder="0.00"
+              className="w-full h-10 px-2 text-sm rounded border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none text-center"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">R4</label>
+            <input
+              type="number"
+              step="0.01"
+              value={qDg4}
+              onChange={(e) => setQDg4(e.target.value)}
+              placeholder="0.00"
+              className="w-full h-10 px-2 text-sm rounded border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none text-center"
+            />
+          </div>
+        </div>
+
+        {/* Row 5: Remark */}
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">Remark (optional)</label>
+          <input
+            type="text"
+            value={qRemark}
+            onChange={(e) => setQRemark(e.target.value)}
+            placeholder="Notes..."
+            className="w-full h-10 px-3 text-sm rounded border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none"
+          />
+        </div>
+
+        {/* Add Quick Reading Button */}
+        <button
+          onClick={handleQuickAdd}
+          disabled={isSaving}
+          className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isSaving ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span>Saving...</span>
+            </>
+          ) : (
+            <>
+              <Plus className="w-5 h-5" />
+              <span>+ Add Quick Reading</span>
+            </>
+          )}
+        </button>
+      </div>
     </div>
   );
 }

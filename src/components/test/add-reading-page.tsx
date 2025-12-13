@@ -227,7 +227,7 @@ export function AddReadingPage({ onSave, onCancel, projectInfo }: AddReadingPage
 
             <div>
               <label className={labelClass}>
-                Time <span className="text-rose-600">*</span>
+                Time (24h) <span className="text-rose-600">*</span>
               </label>
               <input
                 type="time"
