@@ -429,29 +429,47 @@ export function DataEntry({
                       } hover:bg-slate-50 ${
                         dateChanged || pressureChanged || loadChanged ? 'bg-blue-50/30' : ''
                       }`}>
-                        <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold">
+                        <td className={`px-2 py-2 border-r border-slate-200 text-center ${
+                          dateChanged || pressureChanged ? 'font-extrabold' : 'font-semibold'
+                        }`}>
                           {dateChanged || globalIndex === 0 ? dateStr : ''}
                         </td>
-                        <td className="px-2 py-2 border-r border-slate-200 text-center">{timeStr}</td>
-                        <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold">
+                        <td className={`px-2 py-2 border-r border-slate-200 text-center ${
+                          dateChanged || pressureChanged ? 'font-extrabold' : ''
+                        }`}>{timeStr}</td>
+                        <td className={`px-2 py-2 border-r border-slate-200 text-center ${
+                          dateChanged || pressureChanged ? 'font-extrabold' : 'font-semibold'
+                        }`}>
                           {pressureChanged ? entry.pressureGauge : ''}
                         </td>
-                        <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold text-blue-700">
+                        <td className={`px-2 py-2 border-r border-slate-200 text-center text-blue-700 ${
+                          dateChanged || pressureChanged ? 'font-extrabold' : 'font-semibold'
+                        }`}>
                           {loadChanged ? entry.load : ''}
                         </td>
-                        <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold">
+                        <td className={`px-2 py-2 border-r border-slate-200 text-center ${
+                          dateChanged || pressureChanged ? 'font-extrabold' : 'font-semibold'
+                        }`}>
                           {reading.dialGauge1}
                         </td>
-                        <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold">
+                        <td className={`px-2 py-2 border-r border-slate-200 text-center ${
+                          dateChanged || pressureChanged ? 'font-extrabold' : 'font-semibold'
+                        }`}>
                           {reading.dialGauge2}
                         </td>
-                        <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold">
+                        <td className={`px-2 py-2 border-r border-slate-200 text-center ${
+                          dateChanged || pressureChanged ? 'font-extrabold' : 'font-semibold'
+                        }`}>
                           {reading.dialGauge3}
                         </td>
-                        <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold">
+                        <td className={`px-2 py-2 border-r border-slate-200 text-center ${
+                          dateChanged || pressureChanged ? 'font-extrabold' : 'font-semibold'
+                        }`}>
                           {reading.dialGauge4}
                         </td>
-                        <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold text-green-700">
+                        <td className={`px-2 py-2 border-r border-slate-200 text-center text-green-700 ${
+                          dateChanged || pressureChanged ? 'font-extrabold' : 'font-semibold'
+                        }`}>
                           {avg}
                         </td>
                         <td className="px-2 py-2 border-r border-slate-200 text-xs text-gray-600 italic">
