@@ -164,10 +164,17 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
   };
 
   /**
-   * Fetch existing conclusion on mount (if testId exists).
-   * Why: Load any previously saved conclusion.
+   * Fetch existing conclusion on mount or when testId changes.
+   * Why: Load saved conclusion and clear stale state when switching tests.
    */
   useEffect(() => {
+    // Clear stale conclusion state immediately when testId changes
+    setConclusion('');
+    setConclusionDraft('');
+    setConclusionSource(null);
+    setConclusionError(null);
+    setIsEditingConclusion(false);
+
     if (!testId) return;
 
     const fetchConclusion = async () => {
@@ -179,9 +186,11 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
             setConclusion(data.conclusion);
             setConclusionSource('saved');
           }
+          // If no conclusion in response, state is already cleared above
         }
       } catch (error) {
         console.error('Failed to fetch conclusion:', error);
+        // State already cleared, so no stale data will show
       }
     };
 
