@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, Fragment, useEffect } from 'react';
-import { Plus, Trash2, Pencil, Loader2, Cloud, CloudOff } from 'lucide-react';
+import { useState, Fragment, useEffect, useMemo } from 'react';
+import { Plus, Trash2, Pencil, Loader2, Cloud, CloudOff, ChevronDown, ChevronRight } from 'lucide-react';
 import { AddReadingPage, type NewReadingData } from './add-reading-page';
 import { DeleteConfirmationModal } from './delete-confirmation-modal';
 import type { LoadEntry, LegacyReading, LegacyProjectInfo, LegacyTestPhase } from '@/types';
@@ -62,6 +62,42 @@ function getDefaultsFromLastReading(loadEntries: LoadEntry[]) {
 }
 
 /**
+ * Groups entries by pressure value for collapsible display.
+ * Why: Allows site engineers to collapse readings at the same pressure level for better overview.
+ */
+interface PressureGroup {
+  pressure: string;
+  startIndex: number;
+  entries: LoadEntry[];
+}
+
+/**
+ * Groups consecutive entries by pressure value.
+ * Why: Enables collapsible sections for each pressure level in the table.
+ */
+function groupEntriesByPressure(loadEntries: LoadEntry[]): PressureGroup[] {
+  const groups: PressureGroup[] = [];
+  let currentGroup: PressureGroup | null = null;
+
+  loadEntries.forEach((entry, index) => {
+    if (!currentGroup || currentGroup.pressure !== entry.pressureGauge) {
+      // Start a new group
+      currentGroup = {
+        pressure: entry.pressureGauge,
+        startIndex: index,
+        entries: [entry],
+      };
+      groups.push(currentGroup);
+    } else {
+      // Add to existing group
+      currentGroup.entries.push(entry);
+    }
+  });
+
+  return groups;
+}
+
+/**
  * Timeline/table view for all readings with quick-add form.
  * Why: Main data entry screen for fast on-site measurement recording.
  */
@@ -76,6 +112,35 @@ export function DataEntry({
   const [insertAtIndex, setInsertAtIndex] = useState<number | undefined>(undefined);
   const [isSaving, setIsSaving] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
+  
+  /**
+   * Tracks which pressure groups are collapsed.
+   * Why: Allows toggling visibility of rows per pressure level.
+   * Key is "pressure-startIndex" to handle same pressure appearing multiple times.
+   */
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  /**
+   * Groups entries by pressure for collapsible rendering.
+   * Why: Memoized to avoid recalculating on every render.
+   */
+  const pressureGroups = useMemo(() => groupEntriesByPressure(loadEntries), [loadEntries]);
+
+  /**
+   * Toggle collapse state for a pressure group.
+   * Why: Allows clicking on pressure cell to expand/collapse readings.
+   */
+  const togglePressureGroup = (groupKey: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) {
+        next.delete(groupKey);
+      } else {
+        next.add(groupKey);
+      }
+      return next;
+    });
+  };
 
   // Edit mode state
   const [editingEntry, setEditingEntry] = useState<{ entry: LoadEntry; index: number } | null>(null);
@@ -470,133 +535,190 @@ export function DataEntry({
                 </tr>
               </thead>
               <tbody>
-                {loadEntries.map((entry, globalIndex) => {
-                  const reading = entry.readings[0];
-                  const phase = reading.phase || 'loading';
-                  const phaseInfo = phases.find((p) => p.key === phase);
-
-                  const loadDate = new Date(reading.timestamp);
-                  const dateStr = formatDateDDMMYYYY(loadDate);
-                  const timeStr = loadDate.toLocaleTimeString('en-US', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false,
-                  });
-                  // Format time for delete modal (12h format)
-                  const timeStr12h = loadDate.toLocaleTimeString('en-US', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: true,
-                  });
-
-                  const avg = calculateAverageSettlement(
-                    reading.dialGauge1,
-                    reading.dialGauge2,
-                    reading.dialGauge3,
-                    reading.dialGauge4
-                  );
-
-                  // Check if we need to show phase header
-                  const prevEntry = globalIndex > 0 ? loadEntries[globalIndex - 1] : null;
-                  const prevPhase = prevEntry ? prevEntry.readings[0].phase || 'loading' : null;
-                  const showPhaseHeader = phase !== prevPhase;
-
-                  // Check for date changes
-                  const prevDate = prevEntry
-                    ? formatDateDDMMYYYY(new Date(prevEntry.readings[0].timestamp))
-                    : null;
-                  const dateChanged = prevDate && dateStr !== prevDate;
-
-                  // Check for pressure changes
-                  const prevPressure = prevEntry ? prevEntry.pressureGauge : null;
-                  const pressureChanged = !prevPressure || entry.pressureGauge !== prevPressure;
-
-                  // Check for load changes
-                  const prevLoad = prevEntry ? prevEntry.load : null;
-                  const loadChanged = !prevLoad || entry.load !== prevLoad;
-
-                  // Check if next entry has same pressure/load (to hide border)
-                  const nextEntry =
-                    globalIndex < loadEntries.length - 1 ? loadEntries[globalIndex + 1] : null;
-                  const nextPressure = nextEntry ? nextEntry.pressureGauge : null;
-                  const nextLoad = nextEntry ? nextEntry.load : null;
-                  const sameAsNext = nextPressure === entry.pressureGauge && nextLoad === entry.load;
+                {pressureGroups.map((group) => {
+                  const groupKey = `${group.pressure}-${group.startIndex}`;
+                  const isCollapsed = collapsedGroups.has(groupKey);
+                  const hasMultipleEntries = group.entries.length > 1;
 
                   return (
-                    <Fragment key={entry.id}>
-                      {/* Phase Header Row */}
-                      {showPhaseHeader && (
-                        <tr>
-                          <td
-                            colSpan={12}
-                            className={`${phaseInfo?.color} text-white text-center py-1 font-semibold border-y border-slate-300`}
-                          >
-                            {phaseInfo?.label}
-                          </td>
-                        </tr>
-                      )}
+                    <Fragment key={groupKey}>
+                      {group.entries.map((entry, indexInGroup) => {
+                        const globalIndex = group.startIndex + indexInGroup;
+                        const reading = entry.readings[0];
+                        const phase = reading.phase || 'loading';
+                        const phaseInfo = phases.find((p) => p.key === phase);
 
-                      {/* Data Row */}
-                      <tr className={`${
-                        sameAsNext ? 'border-b border-slate-100' : 'border-b border-slate-200'
-                      } hover:bg-slate-50 ${
-                        dateChanged || pressureChanged || loadChanged ? 'bg-blue-50/30' : ''
-                      }`}>
-                        <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold">
-                          {dateChanged || globalIndex === 0 ? dateStr : ''}
-                        </td>
-                        <td className="px-2 py-2 border-r border-slate-200 text-center">{timeStr}</td>
-                        <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold">
-                          {pressureChanged ? entry.pressureGauge : ''}
-                        </td>
-                        <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold text-blue-700">
-                          {loadChanged ? entry.load : ''}
-                        </td>
-                        <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold">
-                          {reading.dialGauge1}
-                        </td>
-                        <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold">
-                          {reading.dialGauge2}
-                        </td>
-                        <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold">
-                          {reading.dialGauge3}
-                        </td>
-                        <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold">
-                          {reading.dialGauge4}
-                        </td>
-                        <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold text-green-700">
-                          {avg}
-                        </td>
-                        <td className="px-2 py-2 border-r border-slate-200 text-xs text-gray-600 italic">
-                          {reading.remark || '-'}
-                        </td>
-                        <td className="px-2 py-2 border-r border-slate-200 text-center">
-                          <div className="flex items-center gap-1 justify-center">
-                            <button
-                              onClick={() => handleAddBetween(globalIndex + 1)}
-                              className="text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors flex items-center gap-1 text-xs whitespace-nowrap"
-                            >
-                              <Plus className="w-3 h-3" />
-                              <span className="hidden sm:inline">Insert</span>
-                            </button>
-                            <button
-                              onClick={() => handleEditReading(entry, globalIndex)}
-                              className="text-amber-600 hover:bg-amber-50 px-2 py-1 rounded transition-colors flex items-center gap-1 text-xs whitespace-nowrap"
-                            >
-                              <Pencil className="w-3 h-3" />
-                              <span className="hidden sm:inline">Edit</span>
-                            </button>
-                          </div>
-                        </td>
-                        <td className="px-2 py-2 text-center">
-                          <button
-                            onClick={() => handleDeleteClick(entry.id, reading.id, timeStr12h, entry.load)}
-                            className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </td>
-                      </tr>
+                        const loadDate = new Date(reading.timestamp);
+                        const dateStr = formatDateDDMMYYYY(loadDate);
+                        const timeStr = loadDate.toLocaleTimeString('en-US', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: false,
+                        });
+                        // Format time for delete modal (12h format)
+                        const timeStr12h = loadDate.toLocaleTimeString('en-US', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: true,
+                        });
+
+                        const avg = calculateAverageSettlement(
+                          reading.dialGauge1,
+                          reading.dialGauge2,
+                          reading.dialGauge3,
+                          reading.dialGauge4
+                        );
+
+                        // Check if we need to show phase header
+                        const prevEntry = globalIndex > 0 ? loadEntries[globalIndex - 1] : null;
+                        const prevPhase = prevEntry ? prevEntry.readings[0].phase || 'loading' : null;
+                        const showPhaseHeader = phase !== prevPhase;
+
+                        // Check for date changes
+                        const prevDate = prevEntry
+                          ? formatDateDDMMYYYY(new Date(prevEntry.readings[0].timestamp))
+                          : null;
+                        const dateChanged = prevDate && dateStr !== prevDate;
+
+                        // First entry in group shows pressure
+                        const isFirstInGroup = indexInGroup === 0;
+                        const isLastInGroup = indexInGroup === group.entries.length - 1;
+
+                        // Check for load changes
+                        const prevLoad = prevEntry ? prevEntry.load : null;
+                        const loadChanged = !prevLoad || entry.load !== prevLoad;
+
+                        // If collapsed, only show first row with summary
+                        if (isCollapsed && !isFirstInGroup) {
+                          return null;
+                        }
+
+                        return (
+                          <Fragment key={entry.id}>
+                            {/* Phase Header Row */}
+                            {showPhaseHeader && (
+                              <tr>
+                                <td
+                                  colSpan={12}
+                                  className={`${phaseInfo?.color} text-white text-center py-1 font-semibold border-y border-slate-300`}
+                                >
+                                  {phaseInfo?.label}
+                                </td>
+                              </tr>
+                            )}
+
+                            {/* Data Row */}
+                            <tr className={`${
+                              isLastInGroup || isCollapsed ? 'border-b border-slate-200' : 'border-b border-slate-100'
+                            } hover:bg-slate-50 ${
+                              isFirstInGroup ? 'bg-blue-50/30' : ''
+                            }`}>
+                              <td className={`px-2 py-2 border-r border-slate-200 text-center ${
+                                isFirstInGroup ? 'font-extrabold' : 'font-semibold'
+                              }`}>
+                                {dateChanged || globalIndex === 0 ? dateStr : ''}
+                              </td>
+                              <td className={`px-2 py-2 border-r border-slate-200 text-center ${
+                                isFirstInGroup ? 'font-extrabold' : ''
+                              }`}>
+                                {isCollapsed ? `${timeStr} - ...` : timeStr}
+                              </td>
+                              {/* Pressure cell - clickable for groups with multiple entries */}
+                              <td 
+                                className={`px-2 py-2 border-r border-slate-200 text-center font-semibold ${
+                                  hasMultipleEntries && isFirstInGroup ? 'cursor-pointer hover:bg-blue-100 select-none' : ''
+                                } ${isFirstInGroup ? 'font-extrabold' : ''}`}
+                                onClick={() => {
+                                  if (hasMultipleEntries && isFirstInGroup) {
+                                    togglePressureGroup(groupKey);
+                                  }
+                                }}
+                              >
+                                {isFirstInGroup ? (
+                                  <div className="flex items-center justify-center gap-1">
+                                    {hasMultipleEntries && (
+                                      isCollapsed ? (
+                                        <ChevronRight className="w-3 h-3 text-slate-500" />
+                                      ) : (
+                                        <ChevronDown className="w-3 h-3 text-slate-500" />
+                                      )
+                                    )}
+                                    <span>{entry.pressureGauge}</span>
+                                    {isCollapsed && hasMultipleEntries && (
+                                      <span className="text-xs text-slate-500 ml-1">
+                                        ({group.entries.length})
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : ''}
+                              </td>
+                              <td className={`px-2 py-2 border-r border-slate-200 text-center text-blue-700 ${
+                                isFirstInGroup ? 'font-extrabold' : 'font-semibold'
+                              }`}>
+                                {loadChanged ? entry.load : ''}
+                              </td>
+                              <td className={`px-2 py-2 border-r border-slate-200 text-center ${
+                                isFirstInGroup ? 'font-extrabold' : 'font-semibold'
+                              }`}>
+                                {isCollapsed ? '...' : reading.dialGauge1}
+                              </td>
+                              <td className={`px-2 py-2 border-r border-slate-200 text-center ${
+                                isFirstInGroup ? 'font-extrabold' : 'font-semibold'
+                              }`}>
+                                {isCollapsed ? '...' : reading.dialGauge2}
+                              </td>
+                              <td className={`px-2 py-2 border-r border-slate-200 text-center ${
+                                isFirstInGroup ? 'font-extrabold' : 'font-semibold'
+                              }`}>
+                                {isCollapsed ? '...' : reading.dialGauge3}
+                              </td>
+                              <td className={`px-2 py-2 border-r border-slate-200 text-center ${
+                                isFirstInGroup ? 'font-extrabold' : 'font-semibold'
+                              }`}>
+                                {isCollapsed ? '...' : reading.dialGauge4}
+                              </td>
+                              <td className={`px-2 py-2 border-r border-slate-200 text-center text-green-700 ${
+                                isFirstInGroup ? 'font-extrabold' : 'font-semibold'
+                              }`}>
+                                {isCollapsed ? '...' : avg}
+                              </td>
+                              <td className="px-2 py-2 border-r border-slate-200 text-xs text-gray-600 italic">
+                                {isCollapsed ? `${group.entries.length} readings` : (reading.remark || '-')}
+                              </td>
+                              <td className="px-2 py-2 border-r border-slate-200 text-center">
+                                <div className="flex items-center gap-1 justify-center">
+                                  <button
+                                    onClick={() => handleAddBetween(globalIndex + 1)}
+                                    className="text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors flex items-center gap-1 text-xs whitespace-nowrap"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                    <span className="hidden sm:inline">Insert</span>
+                                  </button>
+                                  {!isCollapsed && (
+                                    <button
+                                      onClick={() => handleEditReading(entry, globalIndex)}
+                                      className="text-amber-600 hover:bg-amber-50 px-2 py-1 rounded transition-colors flex items-center gap-1 text-xs whitespace-nowrap"
+                                    >
+                                      <Pencil className="w-3 h-3" />
+                                      <span className="hidden sm:inline">Edit</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-2 py-2 text-center">
+                                {!isCollapsed && (
+                                  <button
+                                    onClick={() => handleDeleteClick(entry.id, reading.id, timeStr12h, entry.load)}
+                                    className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          </Fragment>
+                        );
+                      })}
                     </Fragment>
                   );
                 })}
