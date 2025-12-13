@@ -430,3 +430,89 @@ export async function reorderSiteImages(
   return response.json();
 }
 
+// =============================================================================
+// CALIBRATION CERTIFICATES API
+// =============================================================================
+
+/**
+ * Certificate types matching Prisma enum
+ */
+export type CertificateType =
+  | 'HYDRAULIC_JACK'
+  | 'PRESSURE_GAUGE'
+  | 'DIAL_GAUGE'
+  | 'PROVING_RING'
+  | 'OTHER';
+
+/**
+ * Calibration certificate from Supabase database
+ */
+export interface ApiCertificate {
+  id: string;
+  testId: string;
+  certificateType: CertificateType;
+  storagePath: string;
+  fileName: string;
+  createdAt: string;
+  url: string; // Public URL added by API
+}
+
+/**
+ * Human-readable labels for certificate types
+ */
+export const CERTIFICATE_TYPE_LABELS: Record<CertificateType, string> = {
+  HYDRAULIC_JACK: 'Hydraulic Jack',
+  PRESSURE_GAUGE: 'Pressure Gauge',
+  DIAL_GAUGE: 'Dial Gauge',
+  PROVING_RING: 'Proving Ring',
+  OTHER: 'Other',
+};
+
+/**
+ * Fetch all certificates for a test
+ */
+export async function fetchCertificates(testId: string): Promise<ApiCertificate[]> {
+  const response = await fetch(`/api/tests/${testId}/certificates`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch certificates');
+  }
+  return response.json();
+}
+
+/**
+ * Upload a certificate
+ */
+export async function uploadCertificate(
+  testId: string,
+  file: File,
+  certificateType: CertificateType
+): Promise<ApiCertificate> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('certificateType', certificateType);
+
+  const response = await fetch(`/api/tests/${testId}/certificates`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to upload certificate');
+  }
+  return response.json();
+}
+
+/**
+ * Delete a certificate
+ */
+export async function deleteCertificate(testId: string, certId: string): Promise<void> {
+  const response = await fetch(`/api/tests/${testId}/certificates/${certId}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to delete certificate');
+  }
+}
+
