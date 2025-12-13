@@ -23,6 +23,7 @@ export default function TestPage() {
   const loadEntries = useTestStore((s) => s.loadEntries);
   const userProfile = useTestStore((s) => s.userProfile);
   const showProfileModal = useTestStore((s) => s.showProfileModal);
+  const supabaseTestId = useTestStore((s) => s.supabaseTestId);
 
   // Store actions
   const setCurrentStep = useTestStore((s) => s.setCurrentStep);
@@ -140,7 +141,11 @@ export default function TestPage() {
           />
         )}
         {currentStep === 'report' && (
-          <ReportView projectInfo={projectInfo} loadEntries={loadEntries} />
+          <ReportView 
+            projectInfo={projectInfo} 
+            loadEntries={loadEntries} 
+            testId={supabaseTestId || undefined}
+          />
         )}
       </main>
 

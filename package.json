@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@openai/agents": "^0.3.4",
     "@prisma/client": "^5.22.0",
     "@supabase/supabase-js": "^2.87.1",
     "chart.js": "^4.5.1",
@@ -22,6 +23,7 @@
     "react-chartjs-2": "^5.3.1",
     "react-dom": "^18.3.0",
     "tailwind-merge": "^2.5.0",
+    "zod": "^3.25.76",
     "zustand": "^4.5.0"
   },
   "devDependencies": {

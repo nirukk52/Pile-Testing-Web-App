@@ -186,7 +186,7 @@ annotation: {
 | 3.0 Methodology (IVPLT-specific) | ✅ | IS 2911 procedure |
 | 4.0 Results & Discussion | ✅ | KPIs and analysis |
 | 5.0 Readings & Graph | ⚠️ **PARTIAL** | Table in PDF, no section numbering |
-| Conclusion paragraph auto-written | ❌ **MISSING** | AI prompt exists, not called |
+| Conclusion paragraph auto-written | ✅ **IMPLEMENTED** | AI agent + fallback template |
 
 ### Gap Details
 
@@ -196,13 +196,15 @@ annotation: {
 
 **Required**: Sections numbered exactly as 1.0, 2.0, 3.0, 4.0, 5.0.
 
-**7.2 AI-Generated Conclusion** — Priority: P2
+**7.2 AI-Generated Conclusion** — Priority: P2 — ✅ DONE
 
-**Current**: `getAIConclusionPrompt()` exists in engine but never called. User must manually enter conclusion or use default text.
+**Current**: Implemented using `@openai/agents` SDK.
 
-**Required**: Call OpenAI/Claude API to generate conclusion from `getAIConclusionPrompt()` output.
-
-**Implementation**: Phase 5 in tasks.md (currently not done).
+**Implementation**:
+- `src/lib/ai/conclusion-agent.ts` - AI agent with fallback static template
+- `src/app/api/tests/[testId]/conclusion/route.ts` - API endpoint (GET/POST/PATCH/DELETE)
+- `src/components/test/report-view.tsx` - UI with Generate/Edit/Save buttons
+- PDF template already wires `conclusion` field to output
 
 ---
 
@@ -349,7 +351,7 @@ function validateTestData(
 | 4.1 | Monotonic settlement validation | 2 hours |
 | 6.1 | Design load marker on chart | 2 hours |
 | 6.2 | Test load marker on chart | 1 hour |
-| 7.2 | AI-generated conclusion | 4 hours |
+| ~~7.2~~ | ~~AI-generated conclusion~~ | ✅ Done |
 | 8.2 | Page number verification | 1 hour |
 | 9.1 | Test load validation warning | 1 hour |
 | 9.2 | Missing holding data warning | 1 hour |
