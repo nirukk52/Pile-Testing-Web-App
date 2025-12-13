@@ -225,6 +225,58 @@ These are implemented in `src/types/index.ts`:
 
 ---
 
+## Date Format Standards
+
+**Why**: Ensures consistency across the app per IS 2911 compliance and site engineer expectations.
+
+### Standard Format: dd/mm/yyyy
+All date displays throughout the app MUST use `dd/mm/yyyy` format (e.g., `15/01/2024`):
+- Home screen (test list)
+- Project details page
+- Data entry table
+- Add reading page
+- Report page data table
+
+### Exception: Report Headers
+Report headers and PDF exports MAY use long format for better readability:
+- Format: `15 January 2024`
+- Used in: Report view header, PDF exports, print view
+
+### Implementation
+Use utility functions from `src/lib/utils.ts`:
+```typescript
+import { formatDateDDMMYYYY, formatDateLong, convertDDMMYYYYToISO, convertISOToDDMMYYYY, isValidDDMMYYYY } from '@/lib/utils';
+
+// Standard display (dd/mm/yyyy)
+const dateStr = formatDateDDMMYYYY(new Date());  // "15/01/2024"
+const dateStr2 = formatDateDDMMYYYY(isoString);  // "15/01/2024"
+
+// Report headers only (long format)
+const reportDate = formatDateLong(new Date());   // "15 January 2024"
+
+// For text inputs: Convert between formats
+const isoDate = convertDDMMYYYYToISO('15/01/2024');  // "2024-01-15"
+const displayDate = convertISOToDDMMYYYY('2024-01-15');  // "15/01/2024"
+
+// Validate user input
+const isValid = isValidDDMMYYYY('15/01/2024');  // true
+```
+
+### Date Input Fields
+All date input fields use `<input type="text">` with dd/mm/yyyy format enforcement:
+- Placeholder shows "dd/mm/yyyy"
+- Validates format as user types
+- Converts to ISO format for storage
+- Displays in dd/mm/yyyy format
+- This avoids browser-dependent date picker formatting
+
+### Database Storage
+- Prisma uses `DateTime` type → stored as ISO 8601 in PostgreSQL
+- JavaScript/TypeScript uses `Date` objects or ISO strings internally
+- Only convert to dd/mm/yyyy at display time
+
+---
+
 ## Development Commands
 
 ```bash

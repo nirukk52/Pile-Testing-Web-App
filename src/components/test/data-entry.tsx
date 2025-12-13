@@ -6,6 +6,7 @@ import { AddReadingPage, type NewReadingData } from './add-reading-page';
 import type { LoadEntry, LegacyReading, LegacyProjectInfo, LegacyTestPhase } from '@/types';
 import { calculateLoad, calculateAverageSettlement } from '@/types';
 import { useApiSync } from '@/store/test-store';
+import { formatDateDDMMYYYY, convertISOToDDMMYYYY, convertDDMMYYYYToISO } from '@/lib/utils';
 
 /**
  * Props for the DataEntry component.
@@ -368,11 +369,7 @@ export function DataEntry({
                   const phaseInfo = phases.find((p) => p.key === phase);
 
                   const loadDate = new Date(reading.timestamp);
-                  const dateStr = loadDate.toLocaleDateString('en-GB', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                  });
+                  const dateStr = formatDateDDMMYYYY(loadDate);
                   const timeStr = loadDate.toLocaleTimeString('en-US', {
                     hour: '2-digit',
                     minute: '2-digit',
@@ -393,11 +390,7 @@ export function DataEntry({
 
                   // Check for date changes
                   const prevDate = prevEntry
-                    ? new Date(prevEntry.readings[0].timestamp).toLocaleDateString('en-GB', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                      })
+                    ? formatDateDDMMYYYY(new Date(prevEntry.readings[0].timestamp))
                     : null;
                   const dateChanged = prevDate && dateStr !== prevDate;
 
@@ -519,9 +512,22 @@ export function DataEntry({
           <div>
             <label className="block text-xs text-slate-500 mb-1">Date</label>
             <input
-              type="date"
-              value={qDate}
-              onChange={(e) => setQDate(e.target.value)}
+              type="text"
+              value={qDate ? convertISOToDDMMYYYY(qDate) : ''}
+              onChange={(e) => {
+                const value = e.target.value;
+                // Allow user to type freely
+                if (value === '' || /^[\d/]*$/.test(value)) {
+                  // If complete format, convert to ISO
+                  if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+                    setQDate(convertDDMMYYYYToISO(value));
+                  } else {
+                    // Store the partial input as-is
+                    setQDate(value);
+                  }
+                }
+              }}
+              placeholder="dd/mm/yyyy"
               className="w-full h-10 px-2 text-sm rounded border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none"
             />
           </div>

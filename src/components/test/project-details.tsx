@@ -5,6 +5,7 @@ import { ChevronRight, Calculator, Loader2, CloudOff, Check } from 'lucide-react
 import type { LegacyProjectInfo } from '@/types';
 import { TEST_TYPES } from '@/types';
 import { useApiSync } from '@/store/test-store';
+import { convertISOToDDMMYYYY, convertDDMMYYYYToISO } from '@/lib/utils';
 
 /**
  * Props for the ProjectDetails component.
@@ -142,9 +143,22 @@ export function ProjectDetails({
           <div>
             <label className={labelClass}>Test Date</label>
             <input
-              type="date"
-              value={projectInfo.testDate}
-              onChange={(e) => handleChange('testDate', e.target.value)}
+              type="text"
+              value={projectInfo.testDate ? convertISOToDDMMYYYY(projectInfo.testDate) : ''}
+              onChange={(e) => {
+                const value = e.target.value;
+                // Allow user to type freely
+                if (value === '' || /^[\d/]*$/.test(value)) {
+                  // If complete format, convert to ISO
+                  if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+                    handleChange('testDate', convertDDMMYYYYToISO(value));
+                  } else {
+                    // Store the partial input as-is for user feedback
+                    handleChange('testDate', value);
+                  }
+                }
+              }}
+              placeholder="dd/mm/yyyy"
               className={inputClass}
             />
           </div>
@@ -152,9 +166,22 @@ export function ProjectDetails({
           <div>
             <label className={labelClass}>Date of Casting</label>
             <input
-              type="date"
-              value={projectInfo.dateOfCasting}
-              onChange={(e) => handleChange('dateOfCasting', e.target.value)}
+              type="text"
+              value={projectInfo.dateOfCasting ? convertISOToDDMMYYYY(projectInfo.dateOfCasting) : ''}
+              onChange={(e) => {
+                const value = e.target.value;
+                // Allow user to type freely
+                if (value === '' || /^[\d/]*$/.test(value)) {
+                  // If complete format, convert to ISO
+                  if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+                    handleChange('dateOfCasting', convertDDMMYYYYToISO(value));
+                  } else {
+                    // Store the partial input as-is for user feedback
+                    handleChange('dateOfCasting', value);
+                  }
+                }
+              }}
+              placeholder="dd/mm/yyyy"
               className={inputClass}
             />
           </div>

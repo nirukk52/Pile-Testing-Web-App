@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Check, ArrowLeft, PenTool, AlertTriangle } from 'lucide-react';
 import type { LegacyProjectInfo, LegacyTestPhase } from '@/types';
 import { calculateLoad } from '@/types';
+import { convertISOToDDMMYYYY, convertDDMMYYYYToISO } from '@/lib/utils';
 
 /**
  * Data structure for a new reading.
@@ -218,9 +219,22 @@ export function AddReadingPage({ onSave, onCancel, projectInfo }: AddReadingPage
                 Date <span className="text-rose-600">*</span>
               </label>
               <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
+                type="text"
+                value={date ? convertISOToDDMMYYYY(date) : ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Allow user to type freely
+                  if (value === '' || /^[\d/]*$/.test(value)) {
+                    // If complete format, convert to ISO
+                    if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+                      setDate(convertDDMMYYYYToISO(value));
+                    } else {
+                      // Store the partial input as-is
+                      setDate(value);
+                    }
+                  }
+                }}
+                placeholder="dd/mm/yyyy"
                 className={inputClass}
               />
             </div>

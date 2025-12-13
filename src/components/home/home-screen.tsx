@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Plus, FileText, Trash2, Calendar, MapPin, User } from 'lucide-react';
 import { TestTypeModal } from './test-type-modal';
 import type { PileTestSummary, UserProfile, TestType } from '@/types';
+import { formatDateDDMMYYYY } from '@/lib/utils';
 
 /**
  * Props for the HomeScreen component.
@@ -92,11 +93,7 @@ export function HomeScreen({
             <h2 className="text-gray-900 font-semibold px-2">Recent Tests</h2>
             {tests.map((test) => {
               const createdDate = new Date(test.createdAt);
-              const dateStr = createdDate.toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-              });
+              const dateStr = formatDateDDMMYYYY(createdDate);
               const timeStr = createdDate.toLocaleTimeString('en-US', {
                 hour: '2-digit',
                 minute: '2-digit',

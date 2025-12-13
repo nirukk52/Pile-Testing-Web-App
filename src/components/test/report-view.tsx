@@ -6,6 +6,7 @@ import type { LoadEntry, LegacyProjectInfo } from '@/types';
 import { calculateAverageSettlement, TEST_TYPES } from '@/types';
 import { getTestEngine } from '@/engines';
 import type { ReadingInput, CalculationResult, TestMeta, TestType } from '@/engines';
+import { formatDateDDMMYYYY, formatDateLong } from '@/lib/utils';
 
 /**
  * Props for the ReportView component.
@@ -303,11 +304,11 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
     };
   }, [readingInputs, graphConfig]);
 
-  // Format date/time for table
+  // Format date/time for table (dd/mm/yyyy format)
   const formatDateTime = (timestamp: string) => {
     const date = new Date(timestamp);
     return {
-      date: date.toLocaleDateString(),
+      date: formatDateDDMMYYYY(date),
       time: date.toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',
@@ -365,7 +366,7 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
           <p className="text-slate-500 text-sm mt-1">
             Pile ID: <strong>{projectInfo.pileId || projectInfo.reportNo || '-'}</strong> |
             Location: <strong>{projectInfo.location || '-'}</strong> |
-            Date: <strong>{projectInfo.testDate || new Date().toLocaleDateString()}</strong>
+            Date: <strong>{projectInfo.testDate ? formatDateLong(projectInfo.testDate) : formatDateLong(new Date())}</strong>
           </p>
           {exportError && (
             <p className="text-red-600 text-sm mt-1">
@@ -403,7 +404,7 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
         </h1>
         <div className="text-center text-sm text-slate-600">
           <p>Pile ID: {projectInfo.pileId || projectInfo.reportNo || '-'} | Location: {projectInfo.location || '-'}</p>
-          <p>Test Date: {projectInfo.testDate || new Date().toLocaleDateString()} | Test Method: IS 2911 (Part 4) - 2013</p>
+          <p>Test Date: {projectInfo.testDate ? formatDateLong(projectInfo.testDate) : formatDateLong(new Date())} | Test Method: IS 2911 (Part 4) - 2013</p>
         </div>
       </div>
 

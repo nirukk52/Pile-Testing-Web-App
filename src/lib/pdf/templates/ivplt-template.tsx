@@ -70,7 +70,7 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
 
   const formatDate = (dateStr: string) => {
     try {
-      return new Date(dateStr).toLocaleDateString('en-IN', {
+      return new Date(dateStr).toLocaleDateString('en-GB', {
         day: '2-digit',
         month: 'long',
         year: 'numeric',
