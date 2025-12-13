@@ -724,7 +724,7 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
               )}
             </div>
             <div className="flex gap-2">
-              {!isEditingConclusion && conclusion && (
+              {!isEditingConclusion && !isGeneratingConclusion && conclusion && (
                 <button
                   onClick={handleStartEdit}
                   className="text-slate-600 hover:text-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-sm font-medium hover:bg-slate-100 transition-colors"
