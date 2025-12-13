@@ -335,6 +335,11 @@ export function DataEntry({
       : calculateLoad(data.pressure, projectInfo.ramArea);
     const originalReadingId = editingEntry.entry.readings[0].id;
 
+    // Calculate avg settlement for local state (use override if valid, else calculate)
+    const avgSettlement = (data.avgOverride !== undefined && !isNaN(data.avgOverride) && isFinite(data.avgOverride))
+      ? data.avgOverride.toFixed(2)
+      : calculateAverageSettlement(data.dialGauge1, data.dialGauge2, data.dialGauge3, data.dialGauge4);
+
     const updatedReading: LegacyReading = {
       id: originalReadingId,
       pressureGauge: data.pressure,
@@ -347,6 +352,7 @@ export function DataEntry({
       dg2Enabled: data.dg2Enabled,
       dg3Enabled: data.dg3Enabled,
       dg4Enabled: data.dg4Enabled,
+      avgSettlement, // Preserve for same-session re-edit override detection
       timestamp,
       signature: data.signature,
       remark: data.remark,
