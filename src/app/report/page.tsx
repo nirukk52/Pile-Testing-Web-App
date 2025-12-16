@@ -199,7 +199,7 @@ export default function ReportPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
+    <div className="h-screen bg-gray-100 flex flex-col overflow-hidden">
       {/* Header */}
       <header className="bg-slate-800 text-white px-4 py-3 flex items-center justify-between flex-shrink-0 print:hidden">
         <div className="flex items-center gap-4">
