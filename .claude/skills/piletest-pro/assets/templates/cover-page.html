@@ -1,0 +1,137 @@
+<!-- 
+  Cover Page Template for Pile Load Test Reports
+  Why: Standardized cover page matching IS 2911 report format.
+  
+  Variables to replace:
+  - {{TEST_TYPE_FULL}} - e.g., "INITIAL STATIC VERTICAL PILE LOAD TEST"
+  - {{PILE_DIAMETER}} - e.g., "600"
+  - {{PROJECT_NAME}} - Project name
+  - {{LOCATION}} - Site location
+  - {{PILE_ID}} - e.g., "TP-01"
+  - {{COVER_IMAGE_URL}} - Site photo URL
+  - {{CLIENT}} - Client name
+  - {{CONTRACTOR}} - Contractor name
+  - {{PMC}} - Project Management Consultant (optional)
+  - {{TEST_DATE}} - Formatted date
+  - {{REPORT_NO}} - Report number
+-->
+
+<div class="page cover-page">
+  <div class="cover-title">
+    <h1>{{TEST_TYPE_FULL}}</h1>
+    <h1>ON {{PILE_DIAMETER}}mm DIA PILE</h1>
+    <h2>FOR {{PROJECT_NAME}}</h2>
+    <h2>AT {{LOCATION}}</h2>
+    <p class="pile-id">(TEST PILE {{PILE_ID}})</p>
+  </div>
+  
+  <div class="cover-image">
+    <img src="{{COVER_IMAGE_URL}}" alt="Site Image" />
+    <!-- Fallback: <span class="placeholder">Site Image</span> -->
+  </div>
+  
+  <div class="cover-info">
+    <p><strong>Client:</strong> {{CLIENT}}</p>
+    <p><strong>Contractor:</strong> {{CONTRACTOR}}</p>
+    <!-- Optional: <p><strong>PMC:</strong> {{PMC}}</p> -->
+    <p><strong>Test Date:</strong> {{TEST_DATE}}</p>
+    <p><strong>Report No:</strong> {{REPORT_NO}}</p>
+  </div>
+  
+  <div class="cover-badge">
+    <p>Test conducted as per IS 2911 (Part 4) - 2013</p>
+  </div>
+</div>
+
+<style>
+.cover-page {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+  text-align: center;
+  padding-top: 30px;
+  min-height: 100vh;
+}
+
+.cover-title {
+  margin-bottom: 15px;
+}
+
+.cover-title h1 {
+  font-size: 22pt;
+  color: #1e40af;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  line-height: 1.2;
+  margin-bottom: 8px;
+}
+
+.cover-title h2 {
+  font-size: 14pt;
+  color: #334155;
+  font-weight: 500;
+}
+
+.cover-title .pile-id {
+  margin-top: 15px;
+  font-size: 12pt;
+  color: #64748b;
+}
+
+.cover-image {
+  width: 65%;
+  max-width: 350px;
+  height: 200px;
+  margin: 15px auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cover-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cover-image .placeholder {
+  color: #94a3b8;
+  font-size: 10pt;
+}
+
+.cover-info {
+  text-align: left;
+  width: 80%;
+  max-width: 450px;
+  margin: 12px auto;
+}
+
+.cover-info p {
+  margin: 6px 0;
+  font-size: 11pt;
+}
+
+.cover-info strong {
+  display: inline-block;
+  width: 120px;
+  color: #64748b;
+}
+
+.cover-badge {
+  margin-top: 20px;
+  padding: 12px 25px;
+  border: 2px solid #1e40af;
+  border-radius: 8px;
+}
+
+.cover-badge p {
+  font-size: 11pt;
+  font-weight: 600;
+  color: #1e40af;
+}
+</style>

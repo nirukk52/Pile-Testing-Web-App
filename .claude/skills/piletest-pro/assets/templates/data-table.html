@@ -1,0 +1,141 @@
+<!-- 
+  Data Table Template for Pile Load Test Reports
+  Why: Standardized readings table with phase highlighting.
+  
+  Variables to replace:
+  - {{READINGS}} - Array of reading objects to iterate
+  - {{DATE}}, {{TEST_TYPE}}, {{PILE_ID}} - Header info
+-->
+
+<div class="page content-page">
+  <div class="page-header">
+    <span>{{DATE}}</span>
+    <span>{{TEST_TYPE}} Report - {{PILE_ID}}</span>
+  </div>
+  
+  <div class="section">
+    <h2 class="section-title">7.0 Load Test Data</h2>
+    
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>S.No</th>
+          <th>Date</th>
+          <th>Time</th>
+          <th>Pressure<br/>(kg/cm²)</th>
+          <th>Load<br/>(MT)</th>
+          <th>DG1<br/>(mm)</th>
+          <th>DG2<br/>(mm)</th>
+          <th>DG3<br/>(mm)</th>
+          <th>DG4<br/>(mm)</th>
+          <th>Avg<br/>(mm)</th>
+          <th>Phase</th>
+          <th>Remark</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Iterate over readings -->
+        <!-- 
+        {{#each READINGS}}
+        <tr>
+          <td>{{sequence}}</td>
+          <td>{{formatDate recordedAt}}</td>
+          <td>{{formatTime recordedAt}}</td>
+          <td>{{pressureKgCm2}}</td>
+          <td>{{loadT}}</td>
+          <td>{{dg1}}</td>
+          <td>{{dg2}}</td>
+          <td>{{dg3}}</td>
+          <td>{{dg4}}</td>
+          <td>{{avgSettlementMm}}</td>
+          <td class="phase-{{lowercase phase}}">{{phase}}</td>
+          <td>{{remark}}</td>
+        </tr>
+        {{/each}}
+        -->
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<style>
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9pt;
+  margin: 15px 0;
+}
+
+.data-table th {
+  background: #1e40af;
+  color: white;
+  font-size: 8pt;
+  text-transform: uppercase;
+  padding: 8px 6px;
+  text-align: center;
+  border: 1px solid #1e3a8a;
+}
+
+.data-table td {
+  padding: 6px;
+  text-align: center;
+  border: 1px solid #cbd5e1;
+}
+
+.data-table tr:nth-child(even) {
+  background: #f8fafc;
+}
+
+.data-table tr:hover {
+  background: #f1f5f9;
+}
+
+/* Phase color coding */
+.phase-loading {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.phase-hold {
+  color: #d97706;
+  font-weight: 600;
+}
+
+.phase-unloading {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+/* Column widths */
+.data-table th:nth-child(1) { width: 5%; }   /* S.No */
+.data-table th:nth-child(2) { width: 8%; }   /* Date */
+.data-table th:nth-child(3) { width: 6%; }   /* Time */
+.data-table th:nth-child(4) { width: 8%; }   /* Pressure */
+.data-table th:nth-child(5) { width: 8%; }   /* Load */
+.data-table th:nth-child(6) { width: 7%; }   /* DG1 */
+.data-table th:nth-child(7) { width: 7%; }   /* DG2 */
+.data-table th:nth-child(8) { width: 7%; }   /* DG3 */
+.data-table th:nth-child(9) { width: 7%; }   /* DG4 */
+.data-table th:nth-child(10) { width: 8%; }  /* Avg */
+.data-table th:nth-child(11) { width: 10%; } /* Phase */
+.data-table th:nth-child(12) { width: 19%; } /* Remark */
+
+/* Numeric alignment */
+.data-table td:nth-child(4),
+.data-table td:nth-child(5),
+.data-table td:nth-child(6),
+.data-table td:nth-child(7),
+.data-table td:nth-child(8),
+.data-table td:nth-child(9),
+.data-table td:nth-child(10) {
+  text-align: right;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+/* Remark column */
+.data-table td:nth-child(12) {
+  text-align: left;
+  font-size: 8pt;
+  color: #64748b;
+}
+</style>

@@ -10,6 +10,7 @@ import type { TestType, ReadingInput, TestMeta } from '@/engines';
 import { generatePDFWithPageNumbers } from '@/lib/pdf/generator';
 import { generateIvpltReportHtml, type IvpltReportData } from '@/lib/pdf/templates/ivplt-template';
 import { getPublicUrl, STORAGE_BUCKETS } from '@/lib/supabase';
+import { mergePdfsFromSupabase } from '@/lib/pdf/merge';
 
 interface RouteParams {
   params: Promise<{ testId: string }>;
@@ -80,7 +81,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       caption: img.caption || undefined,
     }));
 
-    // Build report data
+    // Map field readings for display in report
+    const fieldReadingsForReport = test.fieldReadings.map((fr) => ({
+      id: fr.id,
+      filename: fr.fileName,
+      url: getPublicUrl(STORAGE_BUCKETS.FIELD_READINGS, fr.storagePath),
+    }));
+
+    // Map calibration certificates for display in report
+    const certificatesForReport = test.certificates.map((cert) => ({
+      id: cert.id,
+      filename: cert.fileName,
+      url: getPublicUrl(STORAGE_BUCKETS.CERTIFICATES, cert.storagePath),
+    }));
+
+    // Build report data (GET - no chart, use POST for chart)
     const reportData: IvpltReportData = {
       projectName: test.project.name,
       client: test.project.client,
@@ -102,13 +117,31 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       readings: readingInputs,
       conclusion: test.conclusion || undefined,
       siteImages,
+      fieldReadings: fieldReadingsForReport,
+      calibrationCertificates: certificatesForReport,
     };
 
     // Generate HTML
     const html = generateIvpltReportHtml(reportData);
 
-    // Generate PDF
-    const pdfBuffer = await generatePDFWithPageNumbers(html);
+    // Generate main report PDF
+    let pdfBuffer = await generatePDFWithPageNumbers(html);
+
+    // Merge field reading PDFs if any exist using authenticated Supabase download
+    if (test.fieldReadings.length > 0) {
+      const fieldReadingsForMerge = test.fieldReadings.map((fr) => ({
+        storagePath: fr.storagePath,
+      }));
+      pdfBuffer = await mergePdfsFromSupabase(pdfBuffer, fieldReadingsForMerge);
+    }
+
+    // Merge calibration certificate PDFs if any exist using authenticated Supabase download
+    if (test.certificates.length > 0) {
+      const certificatesForMerge = test.certificates.map((cert) => ({
+        storagePath: cert.storagePath,
+      }));
+      pdfBuffer = await mergePdfsFromSupabase(pdfBuffer, certificatesForMerge, 'certificates');
+    }
 
     // Build filename
     const dateStr = test.testDate.toISOString().split('T')[0];
@@ -134,8 +167,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 /**
- * POST /api/tests/[testId]/pdf - Generate PDF with custom data (e.g., chart image)
- * Why: Allows passing additional data like rendered chart image from client.
+ * POST /api/tests/[testId]/pdf - Generate PDF with chart from client
+ * Why: Client captures the rendered Chart.js canvas and sends it as base64.
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
@@ -153,6 +186,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         },
         siteImages: {
           orderBy: { displayOrder: 'asc' },
+        },
+        fieldReadings: {
+          orderBy: { createdAt: 'asc' },
+        },
+        certificates: {
+          orderBy: { createdAt: 'asc' },
         },
       },
     });
@@ -200,7 +239,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       caption: img.caption || undefined,
     }));
 
-    // Build report data
+    // Map field readings for display in report
+    const fieldReadingsForReport = test.fieldReadings.map((fr) => ({
+      id: fr.id,
+      filename: fr.fileName,
+      url: getPublicUrl(STORAGE_BUCKETS.FIELD_READINGS, fr.storagePath),
+    }));
+
+    // Map calibration certificates for display in report
+    const certificatesForReport = test.certificates.map((cert) => ({
+      id: cert.id,
+      filename: cert.fileName,
+      url: getPublicUrl(STORAGE_BUCKETS.CERTIFICATES, cert.storagePath),
+    }));
+
+    // Build report data (use chart from client if provided)
     const reportData: IvpltReportData = {
       projectName: test.project.name,
       client: test.project.client,
@@ -223,13 +276,31 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       conclusion: test.conclusion || undefined,
       chartImageBase64: chartImageBase64 || undefined,
       siteImages,
+      fieldReadings: fieldReadingsForReport,
+      calibrationCertificates: certificatesForReport,
     };
 
     // Generate HTML
     const html = generateIvpltReportHtml(reportData);
 
-    // Generate PDF
-    const pdfBuffer = await generatePDFWithPageNumbers(html);
+    // Generate main report PDF
+    let pdfBuffer = await generatePDFWithPageNumbers(html);
+
+    // Merge field reading PDFs if any exist using authenticated Supabase download
+    if (test.fieldReadings.length > 0) {
+      const fieldReadingsForMerge = test.fieldReadings.map((fr) => ({
+        storagePath: fr.storagePath,
+      }));
+      pdfBuffer = await mergePdfsFromSupabase(pdfBuffer, fieldReadingsForMerge);
+    }
+
+    // Merge calibration certificate PDFs if any exist using authenticated Supabase download
+    if (test.certificates.length > 0) {
+      const certificatesForMerge = test.certificates.map((cert) => ({
+        storagePath: cert.storagePath,
+      }));
+      pdfBuffer = await mergePdfsFromSupabase(pdfBuffer, certificatesForMerge, 'certificates');
+    }
 
     // Build filename
     const dateStr = test.testDate.toISOString().split('T')[0];
