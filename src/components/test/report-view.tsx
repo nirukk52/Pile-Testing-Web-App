@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useMemo, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Download, CheckCircle2, XCircle, AlertCircle, Loader2, FileText, Sparkles, Edit3, Save, X, RotateCcw, FileOutput } from 'lucide-react';
 import type { LoadEntry, LegacyProjectInfo } from '@/types';
 import { calculateAverageSettlement, TEST_TYPES } from '@/types';
 import { getTestEngine } from '@/engines';
 import type { ReadingInput, CalculationResult, TestMeta, TestType } from '@/engines';
 import { formatDateDDMMYYYY, formatDateLong } from '@/lib/utils';
-import { ReportEditor } from './report-editor';
 
 /**
  * Props for the ReportView component.
@@ -26,11 +26,11 @@ interface ReportViewProps {
  * Uses Test Type Engine for IS 2911 compliant calculations.
  */
 export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps) {
+  const router = useRouter();
   const chartRef = useRef<HTMLCanvasElement>(null);
   const chartInstanceRef = useRef<unknown>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
-  const [showReportEditor, setShowReportEditor] = useState(false);
 
   // Conclusion state
   const [conclusion, setConclusion] = useState<string>('');
@@ -529,7 +529,7 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
             {isExporting ? 'Exporting...' : 'Quick PDF'}
           </button>
           <button
-            onClick={() => setShowReportEditor(true)}
+            onClick={() => router.push('/report')}
             disabled={loadEntries.length === 0}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-semibold hover:bg-blue-700 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -882,20 +882,6 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
           </div>
         )}
       </div>
-
-      {/* Report Editor Modal */}
-      {showReportEditor && (
-        <ReportEditor
-          projectInfo={projectInfo}
-          loadEntries={loadEntries}
-          testId={testId}
-          result={result}
-          testMeta={testMeta}
-          testTypeConfig={testTypeConfig}
-          chartRef={chartRef}
-          onClose={() => setShowReportEditor(false)}
-        />
-      )}
     </div>
   );
 }
