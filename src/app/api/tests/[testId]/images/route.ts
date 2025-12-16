@@ -195,11 +195,24 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // Verify all images belong to this test before updating
+    const existingImages = await prisma.siteImage.findMany({
+      where: { id: { in: orderedIds }, testId },
+      select: { id: true },
+    });
+
+    if (existingImages.length !== orderedIds.length) {
+      return NextResponse.json(
+        { error: 'Some images not found or do not belong to this test' },
+        { status: 400 }
+      );
+    }
+
     // Update each image's display order
     await Promise.all(
       orderedIds.map((imageId, index) =>
         prisma.siteImage.update({
-          where: { id: imageId, testId },
+          where: { id: imageId },
           data: { displayOrder: index + 1 },
         })
       )

@@ -20,10 +20,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { testId, imageId } = await params;
 
     const image = await prisma.siteImage.findUnique({
-      where: { id: imageId, testId },
+      where: { id: imageId },
     });
 
-    if (!image) {
+    // Validate image exists and belongs to this test
+    if (!image || image.testId !== testId) {
       return NextResponse.json(
         { error: 'Image not found' },
         { status: 404 }
@@ -63,8 +64,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // Verify image belongs to this test
+    const existing = await prisma.siteImage.findUnique({
+      where: { id: imageId },
+      select: { testId: true },
+    });
+
+    if (!existing || existing.testId !== testId) {
+      return NextResponse.json(
+        { error: 'Image not found' },
+        { status: 404 }
+      );
+    }
+
     const image = await prisma.siteImage.update({
-      where: { id: imageId, testId },
+      where: { id: imageId },
       data: { caption: caption ?? null },
     });
 
@@ -93,11 +107,12 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     // Get image to find storage path
     const image = await prisma.siteImage.findUnique({
-      where: { id: imageId, testId },
-      select: { storagePath: true, displayOrder: true },
+      where: { id: imageId },
+      select: { testId: true, storagePath: true, displayOrder: true },
     });
 
-    if (!image) {
+    // Validate image exists and belongs to this test
+    if (!image || image.testId !== testId) {
       return NextResponse.json(
         { error: 'Image not found' },
         { status: 404 }
@@ -112,7 +127,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (deleteError) {
       console.error('Supabase delete error:', deleteError);
       // Continue with database deletion even if storage delete fails
-      // (file might already be deleted or path invalid)
     }
 
     // Delete database record

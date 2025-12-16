@@ -49,6 +49,20 @@ async function compressImage(file: File, maxSizeMB: number = 2): Promise<File> {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
 
+    // Create blob URL and ensure cleanup
+    const blobUrl = URL.createObjectURL(file);
+
+    const cleanup = () => {
+      URL.revokeObjectURL(blobUrl);
+    };
+
+    // Check canvas context is available
+    if (!ctx) {
+      cleanup();
+      reject(new Error('Canvas context unavailable - cannot compress image'));
+      return;
+    }
+
     img.onload = () => {
       // Calculate dimensions (max 1920px on longest side)
       const maxDim = 1920;
@@ -66,7 +80,7 @@ async function compressImage(file: File, maxSizeMB: number = 2): Promise<File> {
 
       canvas.width = width;
       canvas.height = height;
-      ctx?.drawImage(img, 0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
 
       // Try different quality levels
       let quality = 0.8;
@@ -74,11 +88,13 @@ async function compressImage(file: File, maxSizeMB: number = 2): Promise<File> {
         canvas.toBlob(
           (blob) => {
             if (!blob) {
+              cleanup();
               reject(new Error('Failed to compress image'));
               return;
             }
 
             if (blob.size <= maxSizeMB * 1024 * 1024 || quality <= 0.3) {
+              cleanup();
               const compressedFile = new File([blob], file.name, {
                 type: 'image/jpeg',
                 lastModified: Date.now(),
@@ -97,8 +113,12 @@ async function compressImage(file: File, maxSizeMB: number = 2): Promise<File> {
       tryCompress();
     };
 
-    img.onerror = () => reject(new Error('Failed to load image'));
-    img.src = URL.createObjectURL(file);
+    img.onerror = () => {
+      cleanup();
+      reject(new Error('Failed to load image'));
+    };
+
+    img.src = blobUrl;
   });
 }
 

@@ -19,10 +19,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { testId, certId } = await params;
 
     const certificate = await prisma.calibrationCertificate.findUnique({
-      where: { id: certId, testId },
+      where: { id: certId },
     });
 
-    if (!certificate) {
+    // Validate certificate exists and belongs to this test
+    if (!certificate || certificate.testId !== testId) {
       return NextResponse.json({ error: 'Certificate not found' }, { status: 404 });
     }
 
@@ -47,11 +48,12 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const { testId, certId } = await params;
 
     const certificate = await prisma.calibrationCertificate.findUnique({
-      where: { id: certId, testId },
-      select: { storagePath: true },
+      where: { id: certId },
+      select: { testId: true, storagePath: true },
     });
 
-    if (!certificate) {
+    // Validate certificate exists and belongs to this test
+    if (!certificate || certificate.testId !== testId) {
       return NextResponse.json({ error: 'Certificate not found' }, { status: 404 });
     }
 

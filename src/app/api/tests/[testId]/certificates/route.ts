@@ -122,11 +122,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Create database record (use OTHER as default type - we're simplifying)
+    // Create database record (certificateType defaults to OTHER in schema)
     const certificate = await prisma.calibrationCertificate.create({
       data: {
         testId,
-        certificateType: 'OTHER', // Simplified - no complex types
         storagePath: uploadData.path,
         fileName: file.name,
       },
