@@ -201,22 +201,27 @@
 
 ---
 
-## Phase 9: User Story 7 - Persist Data to Supabase (Priority: P2)
+## Phase 9: User Story 7 - Persist Data to Supabase with Offline Fallback (Priority: P2)
 
-**Goal**: All data persists to Supabase instead of localStorage
+**Goal**: Primary storage via Supabase with localStorage fallback when offline. Clear visual indicator when using fallback. Sync button to push local data when back online.
 
-**Independent Test**: Create test, close browser, reopen, verify all data persists
+**Independent Test**: Create test, disconnect network, verify localStorage fallback with visual indicator, reconnect, use sync button, verify data synced to Supabase
 
 ### Implementation for User Story 7
 
 - [ ] T081 [US7] Ensure all API routes use Prisma client for database operations
-- [ ] T082 [US7] Remove localStorage persistence from Zustand store
-- [ ] T083 [US7] Add loading states for data fetching in components
-- [ ] T084 [US7] Add error handling for network failures with retry UI
-- [ ] T085 [US7] Implement optimistic updates in Zustand store
-- [ ] T086 [US7] Add Supabase Storage signed URL generation for images/certificates
+- [ ] T082 [US7] Create hybrid persistence layer in `src/lib/storage.ts` (Supabase primary, localStorage fallback)
+- [ ] T083 [US7] Add connection status detection hook `useConnectionStatus()` in `src/hooks/use-connection-status.ts`
+- [ ] T084 [US7] Add "Offline Mode" banner component showing when using localStorage fallback
+- [ ] T085 [US7] Add "Sync Now" button component that appears when local data exists and online
+- [ ] T086 [US7] Implement sync logic to push localStorage queue to Supabase when online
+- [ ] T087 [US7] Add loading states for data fetching in components
+- [ ] T088 [US7] Add error handling for network failures with retry UI
+- [ ] T089 [US7] Implement optimistic updates in Zustand store
+- [ ] T090 [US7] Add Supabase Storage signed URL generation for images/certificates
+- [ ] T091 [US7] Show last sync timestamp in footer/header
 
-**Checkpoint**: User Story 7 complete - data persists across sessions via Supabase
+**Checkpoint**: User Story 7 complete - data persists with Supabase/localStorage hybrid, clear offline indicator, sync button works
 
 ---
 
@@ -224,13 +229,56 @@
 
 **Purpose**: Final improvements and validation
 
-- [ ] T087 [P] Update CLAUDE.md with new file locations and patterns
-- [ ] T088 [P] Add loading spinners during API calls
-- [ ] T089 [P] Add toast notifications for success/error states
-- [ ] T090 Validate all forms before submission
-- [ ] T091 [P] Add mobile-responsive styling to new components
-- [ ] T092 Run quickstart.md validation - full end-to-end test
-- [ ] T093 [P] Update README.md with new features
+- [ ] T092 [P] Update CLAUDE.md with new file locations and patterns
+- [ ] T093 [P] Add loading spinners during API calls
+- [ ] T094 [P] Add toast notifications for success/error states
+- [ ] T095 Validate all forms before submission
+- [ ] T096 [P] Add mobile-responsive styling to new components
+- [ ] T097 Run quickstart.md validation - full end-to-end test
+- [ ] T098 [P] Update README.md with new features
+
+**Checkpoint**: Application polished and ready for production
+
+---
+
+## Phase 11: Validation Warnings (Data Quality Guards)
+
+**Purpose**: Implement IS 2911 compliance warnings and data quality checks from gap-analysis.md section 9
+
+**Goal**: Warn users about data inconsistencies without blocking workflow. User can acknowledge warnings with optional comment.
+
+**Independent Test**: Enter data with issues (e.g., test load < required), verify warning appears, acknowledge with comment, verify workflow continues
+
+### Validation Warning Tasks
+
+- [ ] T099 [VAL] Create ValidationWarning type in `src/types/index.ts` with code, message, severity, acknowledged, acknowledgeComment fields
+- [ ] T100 [VAL] Create `validateTestData()` function in `src/lib/validation.ts`
+- [ ] T101 [VAL] Add warning: Test load < 2.5× design load (9.1 from gap-analysis)
+- [ ] T102 [VAL] Add warning: Missing holding phase readings (9.2 from gap-analysis)
+- [ ] T103 [VAL] Add warning: Settlement jump > 2mm between readings (9.3 from gap-analysis)
+- [ ] T104 [VAL] Add warning: Gauge disabled banner showing which gauges are off (9.4 from gap-analysis)
+- [ ] T105 [VAL] Add warning: Settlement not monotonic during loading phase (4.1 from gap-analysis)
+- [ ] T106 [VAL] Create WarningBanner component in `src/components/ui/warning-banner.tsx`
+- [ ] T107 [VAL] Add acknowledge button with optional comment modal
+- [ ] T108 [VAL] Store acknowledged warnings in Test record
+- [ ] T109 [VAL] Display warnings in data-entry.tsx and report-view.tsx
+- [ ] T110 [VAL] Include acknowledged warnings with comments in PDF report
+
+**Checkpoint**: Phase 11 complete - validation warnings show for data quality issues, can be acknowledged
+
+---
+
+## Phase 12: Chart Annotations (Gap 6.x)
+
+**Purpose**: Add visual reference lines to Load vs Settlement chart per gap-analysis.md section 6
+
+- [ ] T111 [CHART] Install chartjs-plugin-annotation: `npm install chartjs-plugin-annotation`
+- [ ] T112 [CHART] Add design load vertical marker line (green dashed) in report-view.tsx
+- [ ] T113 [CHART] Add test load vertical marker line (blue dashed) in report-view.tsx  
+- [ ] T114 [CHART] Add 12mm settlement limit horizontal line (red dashed) in report-view.tsx
+- [ ] T115 [CHART] Add annotation labels showing "Design Load", "Test Load", "12mm Limit"
+
+**Checkpoint**: Phase 12 complete - chart shows all reference markers per IS 2911
 
 ---
 
@@ -336,9 +384,11 @@ Track C: US3 (Certificates)      (Independent)
 | 6 - US3 | Certificates | 9 | 0 |
 | 7 - US6 | PDF Export | 16 | 0 |
 | 8 - US5 | AI Conclusion | 8 | 0 |
-| 9 - US7 | Persistence | 6 | 0 |
+| 9 - US7 | Persistence + Offline | 11 | 0 |
 | 10 - Polish | - | 7 | 5 |
-| **Total** | | **93** | **15** |
+| 11 - Validation | Warnings | 12 | 0 |
+| 12 - Chart | Annotations | 5 | 0 |
+| **Total** | | **115** | **15** |
 
 ---
 

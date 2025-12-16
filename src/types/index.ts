@@ -401,7 +401,7 @@ export interface PileTestSummary {
  * Current step in the test workflow.
  * Why: Tracks user progress through details → entry → report screens.
  */
-export type WorkflowStep = 'details' | 'entry' | 'report';
+export type WorkflowStep = 'details' | 'entry' | 'images' | 'certificates' | 'report';
 
 /**
  * Current view in the app.

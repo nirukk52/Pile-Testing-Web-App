@@ -321,3 +321,174 @@ export async function calculateTestResults(testId: string): Promise<{
   return response.json();
 }
 
+// =============================================================================
+// SITE IMAGES API
+// =============================================================================
+
+/**
+ * Site image from Supabase database
+ */
+export interface ApiSiteImage {
+  id: string;
+  testId: string;
+  storagePath: string;
+  fileName: string;
+  caption: string | null;
+  displayOrder: number;
+  createdAt: string;
+  url: string; // Public URL added by API
+}
+
+/**
+ * Fetch all site images for a test
+ */
+export async function fetchSiteImages(testId: string): Promise<ApiSiteImage[]> {
+  const response = await fetch(`/api/tests/${testId}/images`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch site images');
+  }
+  return response.json();
+}
+
+/**
+ * Upload a site image
+ */
+export async function uploadSiteImage(
+  testId: string,
+  file: File,
+  caption?: string
+): Promise<ApiSiteImage> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (caption) {
+    formData.append('caption', caption);
+  }
+
+  const response = await fetch(`/api/tests/${testId}/images`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to upload image');
+  }
+  return response.json();
+}
+
+/**
+ * Update a site image caption
+ */
+export async function updateSiteImageCaption(
+  testId: string,
+  imageId: string,
+  caption: string | null
+): Promise<ApiSiteImage> {
+  const response = await fetch(`/api/tests/${testId}/images/${imageId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ caption }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to update image');
+  }
+  return response.json();
+}
+
+/**
+ * Delete a site image
+ */
+export async function deleteSiteImage(testId: string, imageId: string): Promise<void> {
+  const response = await fetch(`/api/tests/${testId}/images/${imageId}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to delete image');
+  }
+}
+
+/**
+ * Reorder site images
+ */
+export async function reorderSiteImages(
+  testId: string,
+  orderedIds: string[]
+): Promise<ApiSiteImage[]> {
+  const response = await fetch(`/api/tests/${testId}/images`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orderedIds }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to reorder images');
+  }
+  return response.json();
+}
+
+// =============================================================================
+// CALIBRATION CERTIFICATES API
+// =============================================================================
+
+/**
+ * Calibration certificate from database
+ */
+export interface ApiCertificate {
+  id: string;
+  testId: string;
+  storagePath: string;
+  fileName: string;
+  createdAt: string;
+  url: string; // Public URL
+}
+
+/**
+ * Fetch all certificates for a test
+ */
+export async function fetchCertificates(testId: string): Promise<ApiCertificate[]> {
+  const response = await fetch(`/api/tests/${testId}/certificates`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch certificates');
+  }
+  return response.json();
+}
+
+/**
+ * Upload a certificate PDF
+ */
+export async function uploadCertificate(
+  testId: string,
+  file: File
+): Promise<ApiCertificate> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`/api/tests/${testId}/certificates`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to upload certificate');
+  }
+  return response.json();
+}
+
+/**
+ * Delete a certificate
+ */
+export async function deleteCertificate(testId: string, certId: string): Promise<void> {
+  const response = await fetch(`/api/tests/${testId}/certificates/${certId}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to delete certificate');
+  }
+}
+

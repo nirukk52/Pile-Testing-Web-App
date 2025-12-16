@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, FileText, ClipboardList, Eye, User } from 'lucide-react';
-import { ProjectDetails, DataEntry, ReportView } from '@/components/test';
+import { ArrowLeft, FileText, ClipboardList, Eye, User, Image, FileCheck } from 'lucide-react';
+import { ProjectDetails, DataEntry, ReportView, SiteImages, Certificates } from '@/components/test';
 import { ProfileModal } from '@/components/home';
 import { useTestStore } from '@/store/test-store';
 import type { WorkflowStep, LoadEntry } from '@/types';
@@ -75,6 +75,8 @@ export default function TestPage() {
   const tabs: Array<{ key: WorkflowStep; label: string; icon: typeof FileText }> = [
     { key: 'details', label: 'Details', icon: FileText },
     { key: 'entry', label: 'Data Entry', icon: ClipboardList },
+    { key: 'images', label: 'Images', icon: Image },
+    { key: 'certificates', label: 'Certs', icon: FileCheck },
     { key: 'report', label: 'Report', icon: Eye },
   ];
 
@@ -139,6 +141,38 @@ export default function TestPage() {
             onDeleteEntry={deleteLoadEntry}
             projectInfo={projectInfo}
           />
+        )}
+        {currentStep === 'images' && supabaseTestId && (
+          <SiteImages testId={supabaseTestId} />
+        )}
+        {currentStep === 'images' && !supabaseTestId && (
+          <div className="p-6 text-center">
+            <p className="text-slate-600 mb-4">
+              Please save project details first to upload images.
+            </p>
+            <button
+              onClick={() => setCurrentStep('details')}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Go to Details
+            </button>
+          </div>
+        )}
+        {currentStep === 'certificates' && supabaseTestId && (
+          <Certificates testId={supabaseTestId} />
+        )}
+        {currentStep === 'certificates' && !supabaseTestId && (
+          <div className="p-6 text-center">
+            <p className="text-slate-600 mb-4">
+              Please save project details first to upload certificates.
+            </p>
+            <button
+              onClick={() => setCurrentStep('details')}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Go to Details
+            </button>
+          </div>
         )}
         {currentStep === 'report' && (
           <ReportView 

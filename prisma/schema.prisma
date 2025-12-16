@@ -191,15 +191,14 @@ model CalibrationCertificate {
   testId          String
   test            Test            @relation(fields: [testId], references: [id], onDelete: Cascade)
 
-  // Certificate metadata
-  certificateType CertificateType
+  // Certificate metadata (certificateType kept for backwards compatibility, defaults to OTHER)
+  certificateType CertificateType @default(OTHER)
   storagePath     String          // Supabase Storage path
   fileName        String          // Original filename
 
   createdAt       DateTime        @default(now())
 
-  // One certificate per type per test
-  @@unique([testId, certificateType])
+  // Multiple certificates per test allowed (removed unique constraint)
   @@index([testId])
 }
 
