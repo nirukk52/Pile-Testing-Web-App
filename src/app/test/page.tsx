@@ -77,7 +77,7 @@ export default function TestPage() {
     { key: 'entry', label: 'Data Entry', icon: ClipboardList },
     { key: 'images', label: 'Images', icon: Image },
     { key: 'certificates', label: 'Certs', icon: FileCheck },
-    { key: 'report', label: 'Report', icon: Eye },
+    { key: 'report', label: 'Summary', icon: Eye },
   ];
 
   return (

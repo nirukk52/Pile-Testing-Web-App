@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useMemo, useState, useCallback } from 'react';
-import { Download, CheckCircle2, XCircle, AlertCircle, Loader2, FileText, Sparkles, Edit3, Save, X, RotateCcw } from 'lucide-react';
+import { Download, CheckCircle2, XCircle, AlertCircle, Loader2, FileText, Sparkles, Edit3, Save, X, RotateCcw, FileOutput } from 'lucide-react';
 import type { LoadEntry, LegacyProjectInfo } from '@/types';
 import { calculateAverageSettlement, TEST_TYPES } from '@/types';
 import { getTestEngine } from '@/engines';
 import type { ReadingInput, CalculationResult, TestMeta, TestType } from '@/engines';
 import { formatDateDDMMYYYY, formatDateLong } from '@/lib/utils';
+import { ReportEditor } from './report-editor';
 
 /**
  * Props for the ReportView component.
@@ -29,6 +30,7 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
   const chartInstanceRef = useRef<unknown>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [showReportEditor, setShowReportEditor] = useState(false);
 
   // Conclusion state
   const [conclusion, setConclusion] = useState<string>('');
@@ -493,12 +495,12 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
       <header className="flex justify-between items-center flex-wrap gap-4 print:hidden">
         <div>
           <h1 className="text-xl font-bold text-slate-800">
-            {testTypeConfig?.fullName || 'Initial Vertical Pile Load Test'}
+            Report Summary
           </h1>
           <p className="text-slate-500 text-sm mt-1">
+            {testTypeConfig?.name || 'IVPLT'} |
             Pile ID: <strong>{projectInfo.pileId || projectInfo.reportNo || '-'}</strong> |
-            Location: <strong>{projectInfo.location || '-'}</strong> |
-            Date: <strong>{projectInfo.testDate ? formatDateLong(projectInfo.testDate) : formatDateLong(new Date())}</strong>
+            Location: <strong>{projectInfo.location || '-'}</strong>
           </p>
           {exportError && (
             <p className="text-red-600 text-sm mt-1">
@@ -509,22 +511,30 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
         <div className="flex gap-2">
           <button
             onClick={handlePrint}
-            className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg flex items-center gap-2 font-semibold hover:bg-slate-200 transition-colors border border-slate-300"
+            className="bg-slate-100 text-slate-700 px-3 py-2 rounded-lg flex items-center gap-2 font-medium hover:bg-slate-200 transition-colors border border-slate-300 text-sm"
           >
-            <FileText className="w-5 h-5" />
+            <FileText className="w-4 h-4" />
             Print
           </button>
           <button
             onClick={handleExportPDF}
             disabled={isExporting || loadEntries.length === 0}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-semibold hover:bg-blue-700 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-slate-100 text-slate-700 px-3 py-2 rounded-lg flex items-center gap-2 font-medium hover:bg-slate-200 transition-colors border border-slate-300 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isExporting ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <Download className="w-5 h-5" />
+              <Download className="w-4 h-4" />
             )}
-            {isExporting ? 'Generating...' : 'Export PDF'}
+            {isExporting ? 'Exporting...' : 'Quick PDF'}
+          </button>
+          <button
+            onClick={() => setShowReportEditor(true)}
+            disabled={loadEntries.length === 0}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-semibold hover:bg-blue-700 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <FileOutput className="w-5 h-5" />
+            Generate Report
           </button>
         </div>
       </header>
@@ -872,6 +882,20 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
           </div>
         )}
       </div>
+
+      {/* Report Editor Modal */}
+      {showReportEditor && (
+        <ReportEditor
+          projectInfo={projectInfo}
+          loadEntries={loadEntries}
+          testId={testId}
+          result={result}
+          testMeta={testMeta}
+          testTypeConfig={testTypeConfig}
+          chartRef={chartRef}
+          onClose={() => setShowReportEditor(false)}
+        />
+      )}
     </div>
   );
 }

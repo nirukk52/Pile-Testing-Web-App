@@ -49,6 +49,8 @@ export const STORAGE_BUCKETS = {
   SITE_IMAGES: 'site-images',
   /** Bucket for calibration certificate PDFs */
   CERTIFICATES: 'certificates',
+  /** Bucket for scanned field reading sheets (handwritten records) */
+  FIELD_READINGS: 'field-readings',
 } as const;
 
 /**

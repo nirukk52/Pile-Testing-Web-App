@@ -19,8 +19,8 @@ interface SiteImagesProps {
   testId: string;
 }
 
-/** Maximum number of images per test */
-const MAX_IMAGES = 5;
+/** Maximum number of images per test (1: cover, 2: TOC, 3-4: remaining) */
+const MAX_IMAGES = 4;
 
 /** Maximum file size (2MB) */
 const MAX_FILE_SIZE = 2 * 1024 * 1024;

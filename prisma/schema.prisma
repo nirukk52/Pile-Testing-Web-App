@@ -114,6 +114,7 @@ model Test {
   readings        Reading[]
   siteImages      SiteImage[]
   certificates    CalibrationCertificate[]
+  fieldReadings   FieldReading[]
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -199,6 +200,22 @@ model CalibrationCertificate {
   createdAt       DateTime        @default(now())
 
   // Multiple certificates per test allowed (removed unique constraint)
+  @@index([testId])
+}
+
+/// Field reading PDF (scanned handwritten field sheets) attached to a test.
+/// Why: Original handwritten records are included in final report as reference documentation.
+model FieldReading {
+  id          String   @id @default(uuid())
+  testId      String
+  test        Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  // Storage reference
+  storagePath String   // Supabase Storage path
+  fileName    String   // Original filename
+
+  createdAt   DateTime @default(now())
+
   @@index([testId])
 }
 
