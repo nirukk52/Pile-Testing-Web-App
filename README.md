@@ -35,6 +35,10 @@ A **mobile-first web app** for site engineers to enter readings directly and gen
 
 **Key Change**: Manual data entry instead of OCR. Engineers enter readings directly on-site using their mobile devices. OCR workflow is archived for future use.
 
+Currently after the readings are taken they are sent to admin office, where they are copied over to excel and then graph, summary, report with attached site images and other meta data is created.
+The client will be super impressed if the reports are generated then and there on the site after the final reading is taken. This is what we are selling as MVP. As the site engineer enters the final reading, he can create/edit the report in the web app itself, make any minor formatting, text, layout adjustments and create the final report then and there.
+We learn about his preferrences is a cherry on top!
+
 ---
 
 ## Screens
