@@ -127,14 +127,22 @@ export function ReportEditor({
     if (!testId || !conclusion.trim()) return;
 
     try {
-      await fetch(`/api/tests/${testId}/conclusion`, {
+      const response = await fetch(`/api/tests/${testId}/conclusion`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ conclusion }),
       });
-      setEditingSection(null);
+      
+      if (response.ok) {
+        setEditingSection(null);
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to save conclusion:', errorData);
+        alert('Failed to save conclusion. Please try again.');
+      }
     } catch (error) {
       console.error('Failed to save conclusion:', error);
+      alert('Failed to save conclusion. Please try again.');
     }
   }, [testId, conclusion]);
 
@@ -674,7 +682,10 @@ function ImagesSectionEditor({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!testId) return;
+    if (!testId) {
+      setLoading(false);
+      return;
+    }
 
     const fetchImages = async () => {
       try {
