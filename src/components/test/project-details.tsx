@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { ChevronRight, Calculator, Loader2, CloudOff, Check } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import { ChevronRight, Calculator, Loader2, CloudOff, Check, ChevronDown, Upload, FileText, Trash2, X, AlertCircle, ExternalLink } from 'lucide-react';
 import type { LegacyProjectInfo } from '@/types';
 import { TEST_TYPES } from '@/types';
-import { useApiSync } from '@/store/test-store';
+import { useApiSync, useTestStore } from '@/store/test-store';
 import { convertISOToDDMMYYYY, convertDDMMYYYYToISO } from '@/lib/utils';
 
 /**
@@ -21,14 +21,37 @@ interface ProjectDetailsProps {
  * Form for entering project and pile specifications.
  * Why: First step in test workflow - collects all metadata for IS 2911 compliant reports.
  */
+/** Maximum field reading PDFs per test */
+const MAX_FIELD_READINGS = 5;
+
+/** Maximum file size for field readings (10MB) */
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
+/** Field reading file type from API */
+interface FieldReadingFile {
+  id: string;
+  filename: string;
+  url: string;
+  uploadedAt: string;
+}
+
 export function ProjectDetails({
   projectInfo,
   onUpdateField,
   onNext,
 }: ProjectDetailsProps) {
   const { saveTestToApi, isLoading, error } = useApiSync();
+  const currentTestId = useTestStore((s) => s.currentTestId);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  
+  // Field Readings state
+  const [fieldReadingsExpanded, setFieldReadingsExpanded] = useState(false);
+  const [fieldReadings, setFieldReadings] = useState<FieldReadingFile[]>([]);
+  const [fieldReadingsLoading, setFieldReadingsLoading] = useState(false);
+  const [fieldReadingsUploading, setFieldReadingsUploading] = useState(false);
+  const [fieldReadingsError, setFieldReadingsError] = useState<string | null>(null);
+  const fieldReadingsInputRef = useRef<HTMLInputElement>(null);
 
   const handleChange = (field: keyof LegacyProjectInfo, value: string) => {
     onUpdateField(field, value as LegacyProjectInfo[typeof field]);
@@ -72,6 +95,100 @@ export function ProjectDetails({
     }
   }, [projectInfo.designLoadOnPile, loadMultiplier, projectInfo.testLoad, onUpdateField]);
 
+  // Load field readings when expanded
+  useEffect(() => {
+    if (fieldReadingsExpanded && currentTestId) {
+      loadFieldReadings();
+    }
+  }, [fieldReadingsExpanded, currentTestId]);
+
+  const loadFieldReadings = async () => {
+    if (!currentTestId) return;
+    
+    setFieldReadingsLoading(true);
+    setFieldReadingsError(null);
+    try {
+      const response = await fetch(`/api/tests/${currentTestId}/field-readings`);
+      if (response.ok) {
+        const data = await response.json();
+        setFieldReadings(data.fieldReadings || []);
+      }
+    } catch (err) {
+      console.error('Failed to load field readings:', err);
+      setFieldReadingsError('Failed to load field readings');
+    } finally {
+      setFieldReadingsLoading(false);
+    }
+  };
+
+  const handleFieldReadingUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0 || !currentTestId) return;
+
+    const remainingSlots = MAX_FIELD_READINGS - fieldReadings.length;
+    if (remainingSlots <= 0) {
+      setFieldReadingsError(`Maximum ${MAX_FIELD_READINGS} files allowed`);
+      return;
+    }
+
+    setFieldReadingsUploading(true);
+    setFieldReadingsError(null);
+
+    try {
+      for (const file of Array.from(files).slice(0, remainingSlots)) {
+        // Validate PDF
+        if (file.type !== 'application/pdf') {
+          setFieldReadingsError('Only PDF files are allowed');
+          continue;
+        }
+
+        // Validate size
+        if (file.size > MAX_FILE_SIZE) {
+          setFieldReadingsError(`File too large. Maximum: ${MAX_FILE_SIZE / 1024 / 1024}MB`);
+          continue;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`/api/tests/${currentTestId}/field-readings`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (response.ok) {
+          const uploaded = await response.json();
+          setFieldReadings((prev) => [...prev, uploaded]);
+        } else {
+          const error = await response.json();
+          throw new Error(error.error || 'Upload failed');
+        }
+      }
+    } catch (err) {
+      setFieldReadingsError(err instanceof Error ? err.message : 'Upload failed');
+      console.error(err);
+    } finally {
+      setFieldReadingsUploading(false);
+      if (fieldReadingsInputRef.current) fieldReadingsInputRef.current.value = '';
+    }
+  };
+
+  const handleFieldReadingDelete = async (fileId: string) => {
+    if (!currentTestId) return;
+    
+    try {
+      const response = await fetch(`/api/tests/${currentTestId}/field-readings/${fileId}`, {
+        method: 'DELETE',
+      });
+      
+      if (response.ok) {
+        setFieldReadings((prev) => prev.filter((f) => f.id !== fileId));
+      }
+    } catch (err) {
+      setFieldReadingsError('Failed to delete file');
+      console.error(err);
+    }
+  };
+
   const isFormValid = () => {
     return (
       projectInfo.pileId &&
@@ -108,6 +225,138 @@ export function ProjectDetails({
           </div>
         </div>
       )}
+
+      {/* Field Readings Upload (Optional) */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <button
+          onClick={() => setFieldReadingsExpanded(!fieldReadingsExpanded)}
+          className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <FileText className="w-5 h-5 text-slate-400" />
+            <div className="text-left">
+              <p className="font-medium text-slate-800">Field Readings (Optional)</p>
+              <p className="text-xs text-slate-500">
+                Upload PDF scans of handwritten field sheets
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {fieldReadings.length > 0 && (
+              <span className="bg-blue-100 text-blue-700 text-xs font-medium px-2 py-0.5 rounded-full">
+                {fieldReadings.length}
+              </span>
+            )}
+            <ChevronDown
+              className={`w-5 h-5 text-slate-400 transition-transform ${
+                fieldReadingsExpanded ? 'rotate-180' : ''
+              }`}
+            />
+          </div>
+        </button>
+
+        {fieldReadingsExpanded && (
+          <div className="px-4 pb-4 pt-2 border-t border-slate-100 space-y-3">
+            <p className="text-sm text-slate-600">
+              📝 Upload photos or scans of the original handwritten field recording sheets.
+              These will be included in the final report as reference documentation.
+            </p>
+
+            {/* Error */}
+            {fieldReadingsError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-500" />
+                  <span className="text-red-700 text-sm">{fieldReadingsError}</span>
+                </div>
+                <button onClick={() => setFieldReadingsError(null)} className="text-red-500 hover:text-red-700">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Loading */}
+            {fieldReadingsLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+              </div>
+            ) : (
+              <>
+                {/* File list */}
+                {fieldReadings.length > 0 && (
+                  <div className="space-y-2">
+                    {fieldReadings.map((file) => (
+                      <div
+                        key={file.id}
+                        className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <FileText className="w-5 h-5 text-red-500 flex-shrink-0" />
+                          <span className="text-sm text-slate-700 truncate">{file.filename}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <a
+                            href={file.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 text-slate-500 hover:text-blue-600 transition-colors"
+                            title="View PDF"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </a>
+                          <button
+                            onClick={() => handleFieldReadingDelete(file.id)}
+                            className="p-2 text-slate-500 hover:text-red-600 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Upload button */}
+                {currentTestId ? (
+                  fieldReadings.length < MAX_FIELD_READINGS && (
+                    <>
+                      <button
+                        onClick={() => fieldReadingsInputRef.current?.click()}
+                        disabled={fieldReadingsUploading}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 px-4 border-2 border-dashed border-slate-300 text-slate-600 rounded-lg hover:border-blue-400 hover:text-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {fieldReadingsUploading ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <Upload className="w-5 h-5" />
+                        )}
+                        <span>Upload PDF</span>
+                      </button>
+                      <input
+                        ref={fieldReadingsInputRef}
+                        type="file"
+                        accept="application/pdf"
+                        multiple
+                        onChange={(e) => handleFieldReadingUpload(e.target.files)}
+                        className="hidden"
+                      />
+                    </>
+                  )
+                ) : (
+                  <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg">
+                    💡 Save the test first (click &quot;Continue&quot;) to enable file uploads.
+                  </p>
+                )}
+
+                <p className="text-xs text-slate-400 text-center">
+                  {fieldReadings.length} of {MAX_FIELD_READINGS} files • PDF only • Max 10MB each
+                </p>
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Pile Identification */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-5">

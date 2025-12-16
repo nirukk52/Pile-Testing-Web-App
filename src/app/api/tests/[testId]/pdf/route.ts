@@ -9,6 +9,7 @@ import { getTestEngine } from '@/engines';
 import type { TestType, ReadingInput, TestMeta } from '@/engines';
 import { generatePDFWithPageNumbers } from '@/lib/pdf/generator';
 import { generateIvpltReportHtml, type IvpltReportData } from '@/lib/pdf/templates/ivplt-template';
+import { getPublicUrl, STORAGE_BUCKETS } from '@/lib/supabase';
 
 interface RouteParams {
   params: Promise<{ testId: string }>;
@@ -29,6 +30,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         project: true,
         readings: {
           orderBy: { sequence: 'asc' },
+        },
+        siteImages: {
+          orderBy: { displayOrder: 'asc' },
         },
       },
     });
@@ -70,6 +74,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Calculate results
     const result = engine.calculate(readingInputs, meta);
 
+    // Map site images with public URLs
+    const siteImages = test.siteImages.map((img) => ({
+      url: getPublicUrl(STORAGE_BUCKETS.SITE_IMAGES, img.storagePath),
+      caption: img.caption || undefined,
+    }));
+
     // Build report data
     const reportData: IvpltReportData = {
       projectName: test.project.name,
@@ -91,6 +101,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       result,
       readings: readingInputs,
       conclusion: test.conclusion || undefined,
+      siteImages,
     };
 
     // Generate HTML
@@ -140,6 +151,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         readings: {
           orderBy: { sequence: 'asc' },
         },
+        siteImages: {
+          orderBy: { displayOrder: 'asc' },
+        },
       },
     });
 
@@ -180,6 +194,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Calculate results
     const result = engine.calculate(readingInputs, meta);
 
+    // Map site images with public URLs
+    const siteImages = test.siteImages.map((img) => ({
+      url: getPublicUrl(STORAGE_BUCKETS.SITE_IMAGES, img.storagePath),
+      caption: img.caption || undefined,
+    }));
+
     // Build report data
     const reportData: IvpltReportData = {
       projectName: test.project.name,
@@ -202,6 +222,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       readings: readingInputs,
       conclusion: test.conclusion || undefined,
       chartImageBase64: chartImageBase64 || undefined,
+      siteImages,
     };
 
     // Generate HTML

@@ -1,7 +1,8 @@
 /**
  * Site Images API Route
  * Why: CRUD operations for test site images (visual documentation of pile load test setup).
- * Max 5 images per test, stored in Supabase Storage with metadata in database.
+ * Max 4 images per test (1: cover, 2: TOC, 3-4: remaining in report).
+ * Stored in Supabase Storage with metadata in database.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -13,7 +14,7 @@ interface RouteParams {
 }
 
 /** Maximum number of site images allowed per test */
-const MAX_IMAGES_PER_TEST = 5;
+const MAX_IMAGES_PER_TEST = 4;
 
 /** Maximum file size in bytes (2MB after compression) */
 const MAX_FILE_SIZE = 2 * 1024 * 1024;

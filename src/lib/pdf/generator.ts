@@ -1,23 +1,83 @@
 /**
- * Playwright PDF Generator
- * Why: Uses Playwright to render HTML templates as professional PDF reports.
+ * Serverless PDF Generator
+ * Why: Uses puppeteer-core with @sparticuz/chromium for Vercel serverless compatibility.
+ * Previous Playwright approach didn't work on Vercel due to Chromium binary size limits.
  */
 
-import { chromium, type Browser, type Page } from 'playwright';
+import puppeteer, { type Browser, type Page } from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
+
+/**
+ * Check if running in serverless environment (Vercel).
+ * Why: Different browser launch config needed for local vs serverless.
+ */
+const isServerless = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
 
 let browserInstance: Browser | null = null;
 
 /**
  * Get or create a browser instance.
  * Why: Reuse browser for better performance across multiple PDF generations.
+ * Uses @sparticuz/chromium on serverless, system Chrome locally.
  */
 async function getBrowser(): Promise<Browser> {
-  if (!browserInstance) {
-    browserInstance = await chromium.launch({
+  if (browserInstance) {
+    return browserInstance;
+  }
+
+  if (isServerless) {
+    // Serverless environment (Vercel)
+    // @sparticuz/chromium types may be incomplete, so we use type assertions
+    const execPath = await chromium.executablePath();
+    
+    browserInstance = await puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: { width: 1920, height: 1080 },
+      executablePath: execPath,
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
+  } else {
+    // Local development - try to find Chrome
+    const possiblePaths = [
+      // macOS
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Chromium.app/Contents/MacOS/Chromium',
+      // Linux
+      '/usr/bin/google-chrome',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/chromium',
+      // Windows
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    ];
+
+    let executablePath: string | undefined;
+    
+    // Try to find an existing Chrome installation
+    for (const path of possiblePaths) {
+      try {
+        const fs = await import('fs');
+        if (fs.existsSync(path)) {
+          executablePath = path;
+          break;
+        }
+      } catch {
+        // Continue to next path
+      }
+    }
+
+    if (!executablePath) {
+      // Fallback: use @sparticuz/chromium even locally
+      executablePath = await chromium.executablePath();
+    }
+
+    browserInstance = await puppeteer.launch({
+      headless: true,
+      executablePath,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
   }
+
   return browserInstance;
 }
 
@@ -85,11 +145,8 @@ export async function generatePDF(options: PDFGeneratorOptions): Promise<Buffer>
   try {
     // Set content
     await page.setContent(html, {
-      waitUntil: 'networkidle',
+      waitUntil: 'networkidle0',
     });
-
-    // Wait for any images to load
-    await page.waitForLoadState('domcontentloaded');
 
     // Generate PDF
     const pdfBuffer = await page.pdf({
@@ -101,7 +158,8 @@ export async function generatePDF(options: PDFGeneratorOptions): Promise<Buffer>
       footerTemplate: footerTemplate || '',
     });
 
-    return pdfBuffer;
+    // Convert Uint8Array to Buffer for Node.js compatibility
+    return Buffer.from(pdfBuffer);
   } finally {
     await page.close();
   }
@@ -134,5 +192,3 @@ export async function generatePDFWithPageNumbers(
     ...options,
   });
 }
-
-
