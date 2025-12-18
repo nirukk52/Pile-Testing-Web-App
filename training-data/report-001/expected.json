@@ -1,0 +1,39 @@
+{
+  "$schema": "../../src/lib/eval/expected-schema.json",
+  "_comment": "This file should be populated from Supabase. Run: npm run eval:pull report-001 --test-id=YOUR_TEST_ID",
+  
+  "testId": "TODO_REPLACE_WITH_SUPABASE_TEST_ID",
+  "testType": "IVPLT",
+  
+  "projectInfo": {
+    "pileId": "TP-01",
+    "reportNo": "",
+    "project": "",
+    "location": "",
+    "client": "",
+    "contractor": "",
+    "pileDiameter": 900,
+    "pileDepth": 0,
+    "designLoad": 420,
+    "testLoad": 1050,
+    "ramArea": 0,
+    "concreteGrade": "",
+    "testDate": "",
+    "dateOfCasting": ""
+  },
+  
+  "readings": [
+    {
+      "_comment": "Readings will be populated from Supabase",
+      "sequence": 1,
+      "phase": "loading",
+      "pressure": 0,
+      "load": 0,
+      "dg1": 0,
+      "dg2": 0,
+      "dg3": 0,
+      "dg4": 0,
+      "avgSettlement": 0
+    }
+  ]
+}

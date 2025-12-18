@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { ChevronRight, Calculator, Loader2, CloudOff, Check, ChevronDown, Upload, FileText, Trash2, X, AlertCircle, ExternalLink } from 'lucide-react';
-import type { LegacyProjectInfo } from '@/types';
+import { ChevronRight, Calculator, Loader2, CloudOff, Check, ChevronDown, Upload, FileText, Trash2, X, AlertCircle, ExternalLink, FileSpreadsheet } from 'lucide-react';
+import type { LegacyProjectInfo, IngestionJob, ExtractedProjectInfo, ExtractedReading, LegacyReading } from '@/types';
 import { TEST_TYPES } from '@/types';
 import { useApiSync, useTestStore } from '@/store/test-store';
 import { convertISOToDDMMYYYY, convertDDMMYYYYToISO } from '@/lib/utils';
+import { ExtractionPreviewModal } from './extraction-preview-modal';
 
 /**
  * Props for the ProjectDetails component.
@@ -52,6 +53,15 @@ export function ProjectDetails({
   const [fieldReadingsUploading, setFieldReadingsUploading] = useState(false);
   const [fieldReadingsError, setFieldReadingsError] = useState<string | null>(null);
   const fieldReadingsInputRef = useRef<HTMLInputElement>(null);
+  
+  // Excel extraction state
+  const [extractionJob, setExtractionJob] = useState<IngestionJob | null>(null);
+  const [showExtractionPreview, setShowExtractionPreview] = useState(false);
+  const [extractionLoading, setExtractionLoading] = useState(false);
+  const excelInputRef = useRef<HTMLInputElement>(null);
+  
+  // Store actions for applying extracted data
+  const setLoadEntries = useTestStore((s) => s.setLoadEntries);
 
   const handleChange = (field: keyof LegacyProjectInfo, value: string) => {
     onUpdateField(field, value as LegacyProjectInfo[typeof field]);
@@ -189,6 +199,114 @@ export function ProjectDetails({
     }
   };
 
+  /**
+   * Handles Excel/CSV file upload for data extraction.
+   * Why: Main entry point for auto-ingestion feature.
+   */
+  const handleExcelUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    
+    // Validate file type
+    const validExtensions = /\.(xlsx|xls|csv|pdf|jpg|jpeg|png)$/i;
+    if (!validExtensions.test(file.name)) {
+      setFieldReadingsError('Supported formats: Excel, CSV, PDF, Images');
+      return;
+    }
+    
+    setExtractionLoading(true);
+    setFieldReadingsError(null);
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('testType', projectInfo.testType || 'IVPLT');
+      
+      const response = await fetch('/api/ingest', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Extraction failed');
+      }
+      
+      const job: IngestionJob = await response.json();
+      setExtractionJob(job);
+      setShowExtractionPreview(true);
+    } catch (err) {
+      setFieldReadingsError(err instanceof Error ? err.message : 'Extraction failed');
+      console.error('Excel extraction error:', err);
+    } finally {
+      setExtractionLoading(false);
+      if (excelInputRef.current) excelInputRef.current.value = '';
+    }
+  };
+
+  /**
+   * Applies extracted data to the form.
+   * Why: Auto-fills project info and readings from extracted data.
+   */
+  const handleApplyExtraction = (
+    extractedInfo: ExtractedProjectInfo,
+    extractedReadings: ExtractedReading[]
+  ) => {
+    // Apply project info
+    if (extractedInfo.pileId?.value) handleChange('pileId', extractedInfo.pileId.value);
+    if (extractedInfo.project?.value) handleChange('project', extractedInfo.project.value);
+    if (extractedInfo.location?.value) handleChange('location', extractedInfo.location.value);
+    if (extractedInfo.client?.value) handleChange('client', extractedInfo.client.value);
+    if (extractedInfo.contractor?.value) handleChange('contractor', extractedInfo.contractor.value);
+    if (extractedInfo.pileDiameter?.value) handleChange('pileDiameter', extractedInfo.pileDiameter.value);
+    if (extractedInfo.pileDepth?.value) handleChange('pileDepth', extractedInfo.pileDepth.value);
+    if (extractedInfo.designLoad?.value) handleChange('designLoadOnPile', extractedInfo.designLoad.value);
+    if (extractedInfo.ramArea?.value) handleChange('ramArea', extractedInfo.ramArea.value);
+    if (extractedInfo.concreteGrade?.value) handleChange('mixedDesign', extractedInfo.concreteGrade.value);
+    if (extractedInfo.testDate?.value) handleChange('testDate', extractedInfo.testDate.value);
+    if (extractedInfo.dateOfCasting?.value) handleChange('dateOfCasting', extractedInfo.dateOfCasting.value);
+    if (extractedInfo.reportNo?.value) handleChange('reportNo', extractedInfo.reportNo.value);
+    
+    // Convert extracted readings to LoadEntry format
+    const ramArea = parseFloat(projectInfo.ramArea || extractedInfo.ramArea?.value || '0');
+    const loadEntries = extractedReadings.map((reading, index) => {
+      const pressure = parseFloat(reading.pressureGauge.value) || 0;
+      const load = ramArea > 0 ? ((pressure * ramArea) / 1000).toFixed(2) : '0';
+      
+      const legacyReading: LegacyReading = {
+        id: `extracted-${Date.now()}-${index}`,
+        pressureGauge: reading.pressureGauge.value,
+        load,
+        dialGauge1: reading.dialGauge1.value,
+        dialGauge2: reading.dialGauge2.value,
+        dialGauge3: reading.dialGauge3.value,
+        dialGauge4: reading.dialGauge4.value,
+        dg1Enabled: true,
+        dg2Enabled: true,
+        dg3Enabled: true,
+        dg4Enabled: true,
+        timestamp: reading.timestamp?.value || new Date().toISOString(),
+        phase: (reading.phase?.value as 'loading' | 'holding' | 'unloading') || 'loading',
+        remark: reading.remark?.value || '',
+      };
+      
+      return {
+        id: `entry-${Date.now()}-${index}`,
+        pressureGauge: reading.pressureGauge.value,
+        load,
+        readings: [legacyReading],
+        timestamp: reading.timestamp?.value || new Date().toISOString(),
+      };
+    });
+    
+    // Update store with extracted readings
+    setLoadEntries(loadEntries);
+    
+    // Close modal
+    setShowExtractionPreview(false);
+    setExtractionJob(null);
+  };
+
   const isFormValid = () => {
     return (
       projectInfo.pileId &&
@@ -226,6 +344,49 @@ export function ProjectDetails({
         </div>
       )}
 
+      {/* Import Data from Excel/PDF */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 shadow-sm p-4">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+            <FileSpreadsheet className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <p className="font-semibold text-slate-800">Import Data</p>
+            <p className="text-xs text-slate-600">
+              Auto-fill from Excel, PDF, or photos
+            </p>
+          </div>
+        </div>
+        
+        <button
+          onClick={() => excelInputRef.current?.click()}
+          disabled={extractionLoading}
+          className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-blue-400 transition-colors"
+        >
+          {extractionLoading ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span>Extracting data...</span>
+            </>
+          ) : (
+            <>
+              <Upload className="w-5 h-5" />
+              <span>Upload Excel / PDF</span>
+            </>
+          )}
+        </button>
+        <input
+          ref={excelInputRef}
+          type="file"
+          accept=".xlsx,.xls,.csv,.pdf,.jpg,.jpeg,.png"
+          onChange={(e) => handleExcelUpload(e.target.files)}
+          className="hidden"
+        />
+        <p className="text-xs text-slate-500 mt-2 text-center">
+          Supports: Excel (.xlsx, .csv), PDF, Images
+        </p>
+      </div>
+
       {/* Field Readings Upload (Optional) */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <button
@@ -235,9 +396,9 @@ export function ProjectDetails({
           <div className="flex items-center gap-3">
             <FileText className="w-5 h-5 text-slate-400" />
             <div className="text-left">
-              <p className="font-medium text-slate-800">Field Readings (Optional)</p>
+              <p className="font-medium text-slate-800">Field Sheets (Optional)</p>
               <p className="text-xs text-slate-500">
-                Upload PDF scans of handwritten field sheets
+                Attach original PDF scans for reference
               </p>
             </div>
           </div>
@@ -668,6 +829,18 @@ export function ProjectDetails({
           </>
         )}
       </button>
+
+      {/* Extraction Preview Modal */}
+      {showExtractionPreview && extractionJob && (
+        <ExtractionPreviewModal
+          job={extractionJob}
+          onApply={handleApplyExtraction}
+          onCancel={() => {
+            setShowExtractionPreview(false);
+            setExtractionJob(null);
+          }}
+        />
+      )}
     </div>
   );
 }

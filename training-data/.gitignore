@@ -1,0 +1,10 @@
+# Generated files (keep expected.json, ignore generated outputs)
+*/extracted.json
+*/eval-result.json
+
+# Keep the structure
+!.gitignore
+!*/
+!*/field-sheet/
+!*/og-report/
+!*/expected.json
