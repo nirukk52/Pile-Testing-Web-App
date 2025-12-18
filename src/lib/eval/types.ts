@@ -36,18 +36,20 @@ export interface ExpectedProjectInfo {
 }
 
 /**
- * Expected reading structure.
+ * Expected reading structure - RAW FIELDS ONLY.
+ * Why: We only evaluate what Vision API extracts, not calculated values.
+ * Load and avgSettlement are CALCULATED from pressure/ramArea and dg1-4.
  */
 export interface ExpectedReading {
   sequence: number;
-  phase: 'loading' | 'holding' | 'unloading';
-  pressure: number;       // kg/cm²
-  load: number;           // T
-  dg1: number;            // mm
-  dg2: number;            // mm
-  dg3: number;            // mm
-  dg4: number;            // mm
-  avgSettlement: number;  // mm
+  date?: string;          // Extracted date (YYYY-MM-DD)
+  time?: string;          // Extracted time (HH:MM)
+  pressure: number;       // kg/cm² - RAW
+  dg1: number;            // mm - RAW
+  dg2: number;            // mm - RAW
+  dg3: number;            // mm - RAW
+  dg4: number;            // mm - RAW
+  // NOTE: phase, load, avgSettlement are CALCULATED - not part of eval
 }
 
 /**
@@ -159,3 +161,4 @@ export const DEFAULT_EVAL_CONFIG: EvalConfig = {
     pressureLoadValues: 20,
   },
 };
+

@@ -133,14 +133,29 @@ training-data/
 
 ## Eval Metrics
 
+### What We Extract vs Calculate
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  RAW (Extracted by Vision)     │  CALCULATED (App computes)    │
+├────────────────────────────────┼───────────────────────────────┤
+│  • date                        │  • load = pressure × ramArea  │
+│  • time                        │  • avgSettlement = (Σ dg) / 4 │
+│  • pressure (kg/cm²)           │  • phase (from load pattern)  │
+│  • dg1, dg2, dg3, dg4 (mm)     │  • netSettlement              │
+└────────────────────────────────┴───────────────────────────────┘
+
+Evals ONLY measure RAW extracted fields!
+```
+
 ### Phase 1: Extraction Accuracy (Target: 80%)
 
 | Category | Fields | Weight | Pass Criteria |
 |----------|--------|--------|---------------|
-| **Project Info** | pileId, diameter, depth, designLoad, etc. | 30% | 90% exact match |
+| **Project Info** | pileId, reportNo, diameter, designLoad | 30% | 90% exact match |
 | **Reading Count** | Total readings extracted | 20% | Exact match |
-| **Dial Gauge Values** | DG1, DG2, DG3, DG4 for all readings | 30% | ±0.05mm tolerance |
-| **Pressure/Load** | Pressure gauge, calculated load | 20% | ±1% tolerance |
+| **Dial Gauge Values** | DG1, DG2, DG3, DG4 (RAW) | 30% | ±0.05mm tolerance |
+| **Pressure** | Pressure gauge (RAW) | 20% | ±1% tolerance |
 
 ### Phase 2: Report Comparison
 
@@ -204,36 +219,33 @@ scripts/
 ### Expected.json Schema
 
 ```typescript
+// ONLY RAW fields - load/avgSettlement/phase are CALCULATED
 interface ExpectedData {
-  testId: string;           // Supabase test ID
   testType: 'IVPLT' | 'RVPLT' | 'Lateral' | 'Uplift';
   
   projectInfo: {
-    pileId: string;
-    project: string;
-    location: string;
-    client: string;
-    contractor: string;
+    pileId: string;         // e.g., "TP-01"
+    reportNo: string;       // e.g., "IVPLT-001"
+    project: string;        // Project name
     pileDiameter: number;   // mm
-    pileDepth: number;      // m
     designLoad: number;     // T
-    testLoad: number;       // T
-    ramArea: number;        // cm²
-    concreteGrade: string;  // M25, M35, etc.
-    testDate: string;       // ISO date
+    testLoad: number;       // T (2.5x for IVPLT)
+    ramArea?: number;       // cm² (optional - from equipment)
+    concreteGrade?: string; // M25, M35, etc.
+    testDate?: string;      // ISO date (from first reading)
     dateOfCasting?: string; // ISO date
   };
   
   readings: Array<{
     sequence: number;
-    phase: 'loading' | 'holding' | 'unloading';
-    pressure: number;       // kg/cm²
-    load: number;           // T
-    dg1: number;            // mm
-    dg2: number;            // mm
-    dg3: number;            // mm
-    dg4: number;            // mm
-    avgSettlement: number;  // mm
+    date?: string;          // YYYY-MM-DD (RAW)
+    time?: string;          // HH:MM (RAW)
+    pressure: number;       // kg/cm² (RAW)
+    dg1: number;            // mm (RAW)
+    dg2: number;            // mm (RAW)
+    dg3: number;            // mm (RAW)
+    dg4: number;            // mm (RAW)
+    // NOTE: load, avgSettlement, phase are CALCULATED - not in expected
   }>;
 }
 ```
@@ -285,3 +297,4 @@ A: No, Vision API requires internet. But comparison evals work offline.
 
 **Q: How many training reports do I need?**
 A: Start with 1, add more as you find edge cases. 10+ for production.
+

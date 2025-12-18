@@ -726,3 +726,4 @@ export function getAllFieldPatterns(): Record<string, RegExp[]> {
 
 export type FieldKey = keyof typeof FIELD_DEFINITIONS;
 export type ReadingColumnKey = keyof typeof READING_COLUMNS;
+

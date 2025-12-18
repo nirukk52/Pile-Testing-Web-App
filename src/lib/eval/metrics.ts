@@ -222,8 +222,9 @@ export function compareProjectInfo(
 }
 
 /**
- * Compares a single reading row.
- * Why: Evaluates all fields in a reading against expected values.
+ * Compares a single reading row - RAW FIELDS ONLY.
+ * Why: We only evaluate extracted values, not calculated ones.
+ * Load and avgSettlement are calculated from pressure/ramArea and dg1-4.
  */
 export function compareReading(
   expected: ExpectedReading,
@@ -232,12 +233,7 @@ export function compareReading(
 ): ReadingComparison {
   const fields: FieldComparison[] = [];
   
-  // Phase (string)
-  const phaseResult = compareStrings(expected.phase, extracted.phase || '');
-  phaseResult.field = 'phase';
-  fields.push(phaseResult);
-  
-  // Pressure (percentage tolerance)
+  // Pressure (percentage tolerance) - RAW
   const pressureResult = compareNumbers(
     expected.pressure, 
     extracted.pressure || 0, 
@@ -246,16 +242,7 @@ export function compareReading(
   pressureResult.field = 'pressure';
   fields.push(pressureResult);
   
-  // Load (percentage tolerance)
-  const loadResult = compareNumbers(
-    expected.load, 
-    extracted.load || 0, 
-    config.tolerances.load
-  );
-  loadResult.field = 'load';
-  fields.push(loadResult);
-  
-  // Dial gauges (absolute tolerance)
+  // Dial gauges (absolute tolerance) - RAW
   for (const dg of ['dg1', 'dg2', 'dg3', 'dg4'] as const) {
     const dgResult = compareDialGauge(
       expected[dg], 
@@ -266,20 +253,27 @@ export function compareReading(
     fields.push(dgResult);
   }
   
-  // Average settlement (absolute tolerance)
-  const avgResult = compareDialGauge(
-    expected.avgSettlement, 
-    extracted.avgSettlement || 0, 
-    config.tolerances.dialGauge
-  );
-  avgResult.field = 'avgSettlement';
-  fields.push(avgResult);
+  // Date comparison (if present)
+  if (expected.date) {
+    const dateResult = compareStrings(expected.date, extracted.date || '');
+    dateResult.field = 'date';
+    fields.push(dateResult);
+  }
+  
+  // Time comparison (if present)
+  if (expected.time) {
+    const timeResult = compareStrings(expected.time, extracted.time || '');
+    timeResult.field = 'time';
+    fields.push(timeResult);
+  }
+  
+  // NOTE: phase, load, avgSettlement are CALCULATED - not evaluated
   
   const overallMatch = fields.every(f => f.match);
   
   return {
     sequence: expected.sequence,
-    phase: expected.phase,
+    phase: 'loading', // placeholder - not extracted
     fields,
     overallMatch,
   };
@@ -395,3 +389,4 @@ export function formatEvalResult(
   
   return lines.join('\n');
 }
+
