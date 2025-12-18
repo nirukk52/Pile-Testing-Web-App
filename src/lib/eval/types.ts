@@ -53,13 +53,24 @@ export interface ExpectedReading {
 }
 
 /**
- * Extracted data structure - what Vision API returns.
+ * Extracted reading with confidence flag.
+ * Why: Tracks confidence per reading based on avgSettlement validation.
+ * ±0.05mm tolerance - if calculated avg differs from extracted avg, row is low confidence.
+ */
+export interface ExtractedReading extends Partial<ExpectedReading> {
+  avgSettlement?: number;      // Calculated: (dg1 + dg2 + dg3 + dg4) / 4
+  extractedAvg?: number;       // What the model extracted as avgSettlement column
+  confidence?: 'high' | 'low'; // High if calculated avg matches extracted avg (±0.05mm)
+}
+
+/**
+ * Extracted data structure - what Vision API / Agent Swarm returns.
  * Why: This is the AI's output that we evaluate.
  */
 export interface ExtractedData {
   projectInfo: Partial<ExpectedProjectInfo>;
-  readings: Array<Partial<ExpectedReading>>;
-  confidence: number;
+  readings: ExtractedReading[];
+  confidence: number;          // Overall confidence percentage
   extractedAt: string;
   model: string;
 }

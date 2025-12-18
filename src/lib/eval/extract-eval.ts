@@ -10,7 +10,6 @@ dotenv.config({ path: '.env' });
 
 import fs from 'fs';
 import path from 'path';
-import OpenAI from 'openai';
 import sharp from 'sharp';
 import type { 
   ExpectedData, 
@@ -25,7 +24,7 @@ import {
   calculateScore,
   formatEvalResult 
 } from './metrics';
-import { buildVisionExtractionPrompt, extractDateValue } from '../parsers/extraction-config';
+import { runAgentSwarm, type AgentSwarmResult } from '../ai/agent-swarm';
 
 /**
  * Finds the field sheet PDF in the training data folder.
@@ -92,96 +91,13 @@ async function convertPdfToImages(pdfPath: string): Promise<string[]> {
 }
 
 /**
- * Extracts readings from a single page.
- * Why: Processing pages separately can improve accuracy for multi-page documents.
- */
-async function extractPageReadings(
-  openai: OpenAI,
-  pageImage: string,
-  pageNum: number,
-  totalPages: number,
-  isFirstPage: boolean
-): Promise<{ projectInfo?: Record<string, string>; readings: Array<Record<string, string>> }> {
-  const prompt = isFirstPage
-    ? `Extract ALL data from this pile test field sheet page ${pageNum}/${totalPages}.
-
-## HEADER DATA (from top of page)
-Extract: pileId, project, location, client, contractor, pileDiameter, pileDepth, designLoad, testLoad, ramArea, concreteGrade, testDate, dateOfCasting
-
-## READINGS TABLE
-Extract EVERY row. Each row: date (DD/MM/YYYY), time (HH:MM), pressure (kg/cm²), dg1, dg2, dg3, dg4 (mm)
-
-## PHYSICS VALIDATION RULES
-- First row is ALWAYS: pressure=0, all dg=0 (loading start)
-- ALL 4 dial gauges should be CLOSE to each other (within ~0.5mm)
-  - If dg1=0.19, dg2=0.13, dg3=0.10, dg4=0.06 → OK (all similar)
-  - If dg1=0.19, dg2=0.13, dg3=0.10, dg4=0.06 but you read dg4 as 0.60 → WRONG, should be 0.06
-- Handwriting: 0↔6 often confused, 5↔S, 1↔7
-
-Return JSON:
-{
-  "projectInfo": { "pileId": "...", "project": "...", ... },
-  "readings": [{ "date": "...", "time": "...", "pressure": "...", "dg1": "...", "dg2": "...", "dg3": "...", "dg4": "..." }, ...]
-}`
-    : `Extract ALL reading rows from this pile test data table (page ${pageNum}/${totalPages}).
-
-## COLUMN LAYOUT (left to right)
-1. DATE - DD/MM/YYYY or blank
-2. TIME - HH:MM (24-hour)
-3. PRESSURE - kg/cm² - **ALWAYS whole numbers: 0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 420**
-4. LOAD IN MT - decimal numbers like 102.04, 204.08, 306.12 - **SKIP THIS COLUMN**
-5. DG1 (Reading 1) - dial gauge in mm
-6. DG2 (Reading 2) - dial gauge in mm
-7. DG3 (Reading 3) - dial gauge in mm
-8. DG4 (Reading 4) - dial gauge in mm
-
-## CRITICAL: PRESSURE vs LOAD
-- PRESSURE column has whole numbers: 0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 420
-- LOAD column has decimals: 102.04, 204.08, 306.12, 408.16, 510.20, 612.24, 714.28...
-- **Extract PRESSURE (whole numbers), NOT LOAD (decimals)**
-
-## PHYSICS RULES
-- ALL 4 dial gauges should be CLOSE to each other (within ~0.5mm)
-- Handwriting: 0↔6 confused, 5↔S, 1↔7
-
-Return JSON:
-{
-  "readings": [{ "date": "...", "time": "...", "pressure": "...", "dg1": "...", "dg2": "...", "dg3": "...", "dg4": "..." }, ...]
-}`;
-
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'image_url',
-            image_url: {
-              url: `data:image/png;base64,${pageImage}`,
-              detail: 'high',
-            },
-          },
-          { type: 'text', text: prompt },
-        ],
-      },
-    ],
-    max_tokens: 4096,
-    response_format: { type: 'json_object' },
-  });
-
-  const content = response.choices[0]?.message?.content;
-  if (!content) {
-    return { readings: [] };
-  }
-
-  return JSON.parse(content);
-}
-
-/**
- * Extracts data from a field sheet PDF using Vision API.
- * Why: Core extraction function that calls GPT-4o Vision on handwritten/scanned PDFs.
- * Processes each page separately for better accuracy on multi-page documents.
+ * Extracts data from a field sheet PDF using Agent Swarm.
+ * Why: Uses specialized agents for better accuracy:
+ *   1. Row Counter Agent - counts total rows first
+ *   2. Page Agents - extract in parallel
+ *   3. Project Info Verifier - majority vote
+ *   4. Readings Verifier - avgSettlement validation (±0.05mm)
+ *   5. Row Estimator - insert blank rows for missing data
  */
 async function extractFromFieldSheet(pdfPath: string): Promise<ExtractedData> {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -189,232 +105,69 @@ async function extractFromFieldSheet(pdfPath: string): Promise<ExtractedData> {
     throw new Error('OPENAI_API_KEY not configured. Set it in your environment.');
   }
 
-  const openai = new OpenAI({ apiKey });
-  
   // Convert PDF to images
   console.log('   🖼️  Converting PDF to images...');
   const pageImages = await convertPdfToImages(pdfPath);
   console.log(`   📄 Converted ${pageImages.length} pages`);
   
-  console.log('   📤 Processing each page with GPT-4o Vision API...');
+  // Run agent swarm extraction
+  const swarmResult = await runAgentSwarm(pageImages, apiKey);
   
-  // Process each page separately
-  let projectInfo: Record<string, string> = {};
-  const allReadings: Array<Record<string, string>> = [];
-  
-  for (let i = 0; i < pageImages.length; i++) {
-    const isFirstPage = i === 0;
-    console.log(`   📄 Processing page ${i + 1}/${pageImages.length}...`);
-    
-    const pageResult = await extractPageReadings(
-      openai,
-      pageImages[i],
-      i + 1,
-      pageImages.length,
-      isFirstPage
-    );
-    
-    if (isFirstPage && pageResult.projectInfo) {
-      projectInfo = pageResult.projectInfo;
-    }
-    
-    if (pageResult.readings && pageResult.readings.length > 0) {
-      allReadings.push(...pageResult.readings);
-      console.log(`      ✅ Extracted ${pageResult.readings.length} readings`);
-    }
-  }
-  
-  console.log(`   📊 Total readings extracted: ${allReadings.length}`);
-  
-  // Transform combined results
-  return transformVisionResponseToExtractedData({
-    projectInfo,
-    readings: allReadings,
-    confidence: 85,
-  });
+  // Transform swarm result to ExtractedData format
+  return transformSwarmResultToExtractedData(swarmResult);
 }
 
 /**
- * Transforms Vision API response to our ExtractedData format.
- * Why: Maps the AI's JSON output to our evaluation types.
+ * Transforms agent swarm result to ExtractedData format.
+ * Why: Converts the rich swarm output to the simpler eval format.
  */
-function transformVisionResponseToExtractedData(response: {
-  projectInfo?: Record<string, string>;
-  readings?: Array<Record<string, string>>;
-  confidence?: number;
-  notes?: string;
-}): ExtractedData {
-  const confidence = response.confidence || 70;
-  
+function transformSwarmResultToExtractedData(swarmResult: AgentSwarmResult): ExtractedData {
   // Transform project info
   const projectInfo: ExtractedData['projectInfo'] = {};
-  if (response.projectInfo) {
-    const pi = response.projectInfo;
-    if (pi.pileId) projectInfo.pileId = pi.pileId;
-    if (pi.reportNo) projectInfo.reportNo = pi.reportNo;
-    if (pi.project) projectInfo.project = pi.project;
-    if (pi.location) projectInfo.location = pi.location;
-    if (pi.client) projectInfo.client = pi.client;
-    if (pi.contractor) projectInfo.contractor = pi.contractor;
-    if (pi.pileDiameter) projectInfo.pileDiameter = parseFloat(pi.pileDiameter) || 0;
-    if (pi.pileDepth) projectInfo.pileDepth = parseFloat(pi.pileDepth) || 0;
-    if (pi.designLoad) projectInfo.designLoad = parseFloat(pi.designLoad) || 0;
-    if (pi.testLoad) projectInfo.testLoad = parseFloat(pi.testLoad) || 0;
-    if (pi.ramArea) projectInfo.ramArea = parseFloat(pi.ramArea) || 0;
-    if (pi.concreteGrade) projectInfo.concreteGrade = pi.concreteGrade;
-    if (pi.testDate) projectInfo.testDate = extractDateValue(pi.testDate) || pi.testDate;
-    if (pi.dateOfCasting) projectInfo.dateOfCasting = extractDateValue(pi.dateOfCasting) || pi.dateOfCasting;
-  }
-
-  // Transform readings
-  const readings: ExtractedData['readings'] = [];
-  if (response.readings && Array.isArray(response.readings)) {
-    response.readings.forEach((r, index) => {
-      readings.push({
-        sequence: index + 1,
-        date: r.date ? (extractDateValue(r.date) || r.date) : undefined,
-        time: r.time || undefined,
-        pressure: parseFloat(r.pressure) || 0,
-        dg1: parseFloat(r.dg1) || 0,
-        dg2: parseFloat(r.dg2) || 0,
-        dg3: parseFloat(r.dg3) || 0,
-        dg4: parseFloat(r.dg4) || 0,
-      });
-    });
-  }
-
-  // Apply physics-based validation and correction
-  const correctedReadings = validateAndCorrectReadings(readings);
+  const pi = swarmResult.projectInfo.value;
+  if (pi.pileId) projectInfo.pileId = pi.pileId;
+  if (pi.reportNo) projectInfo.reportNo = pi.reportNo;
+  if (pi.project) projectInfo.project = pi.project;
+  if (pi.location) projectInfo.location = pi.location;
+  if (pi.client) projectInfo.client = pi.client;
+  if (pi.contractor) projectInfo.contractor = pi.contractor;
+  if (pi.pileDiameter) projectInfo.pileDiameter = pi.pileDiameter;
+  if (pi.pileDepth) projectInfo.pileDepth = pi.pileDepth;
+  if (pi.designLoad) projectInfo.designLoad = pi.designLoad;
+  if (pi.testLoad) projectInfo.testLoad = pi.testLoad;
+  if (pi.ramArea) projectInfo.ramArea = pi.ramArea;
+  if (pi.concreteGrade) projectInfo.concreteGrade = pi.concreteGrade;
+  if (pi.testDate) projectInfo.testDate = pi.testDate;
+  if (pi.dateOfCasting) projectInfo.dateOfCasting = pi.dateOfCasting;
+  
+  // Transform readings (excluding empty placeholder rows for eval)
+  const readings: ExtractedData['readings'] = swarmResult.readings
+    .filter(r => !r.isEmpty) // Don't include empty placeholders in eval
+    .map(r => ({
+      sequence: r.sequence,
+      date: r.date,
+      time: r.time,
+      pressure: r.pressure,
+      dg1: r.dg1,
+      dg2: r.dg2,
+      dg3: r.dg3,
+      dg4: r.dg4,
+      avgSettlement: r.calculatedAvg,
+      extractedAvg: r.extractedAvg,
+      confidence: r.confidence,
+    }));
+  
+  // Calculate overall confidence
+  const highConfidenceCount = swarmResult.readings.filter(r => r.confidence === 'high').length;
+  const overallConfidence = Math.round((highConfidenceCount / swarmResult.readings.length) * 100);
   
   return {
     projectInfo,
-    readings: correctedReadings,
-    confidence,
-    extractedAt: new Date().toISOString(),
-    model: 'gpt-4o',
+    readings,
+    confidence: overallConfidence,
+    extractedAt: swarmResult.extractedAt,
+    model: swarmResult.model,
   };
-}
-
-/**
- * Valid pressure values for pile load tests (kg/cm²).
- * Why: Standard test uses 40 kg/cm² increments. If we see decimals, model extracted LOAD instead of PRESSURE.
- */
-const VALID_PRESSURE_VALUES = [0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 420];
-
-/**
- * Validates and corrects readings using physics rules.
- * Why: Handwriting OCR often misreads digits (0↔6, 5↔6, 1↔7).
- * Physics rules can detect and correct these errors.
- */
-function validateAndCorrectReadings(readings: ExtractedData['readings']): ExtractedData['readings'] {
-  if (readings.length === 0) return readings;
-  
-  const corrected = [...readings];
-  let corrections = 0;
-  
-  for (let i = 0; i < corrected.length; i++) {
-    const reading = corrected[i];
-    
-    // Rule 0: Check if pressure looks like LOAD value (decimals instead of whole numbers)
-    // Load values are: pressure × ramArea / 1000 ≈ 102.04, 204.08, 306.12, 408.16...
-    // Pressure values are: 0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 420
-    const pressure = reading.pressure;
-    if (pressure > 0 && !VALID_PRESSURE_VALUES.includes(pressure)) {
-      // Find closest valid pressure (model might have read LOAD column)
-      const closest = VALID_PRESSURE_VALUES.reduce((prev, curr) => 
-        Math.abs(curr - pressure) < Math.abs(prev - pressure) ? curr : prev
-      );
-      
-      // If pressure is a decimal or doesn't match standard values, try to correct
-      if (!Number.isInteger(pressure) || Math.abs(closest - pressure) > 5) {
-        // Check if this looks like a load value (approximately pressure * 2.551)
-        const inferredPressure = Math.round(pressure / 2.551 * 10) / 10;
-        const nearestStandard = VALID_PRESSURE_VALUES.reduce((prev, curr) => 
-          Math.abs(curr - inferredPressure * 10) < Math.abs(prev - inferredPressure * 10) ? curr : prev
-        );
-        
-        if (VALID_PRESSURE_VALUES.includes(nearestStandard)) {
-          console.log(`   🔧 Pressure fix row ${i + 1}: ${pressure} → ${nearestStandard} (detected load value)`);
-          corrected[i].pressure = nearestStandard;
-          corrections++;
-        }
-      }
-    }
-    
-    const gauges = [reading.dg1, reading.dg2, reading.dg3, reading.dg4];
-    
-    // Rule 1: All 4 gauges should be close to each other (within ~1mm typically)
-    const median = gauges.sort((a, b) => a - b)[Math.floor(gauges.length / 2)];
-    const threshold = Math.max(0.5, median * 0.3); // 30% or 0.5mm minimum
-    
-    // Check each gauge against the median
-    const dgKeys = ['dg1', 'dg2', 'dg3', 'dg4'] as const;
-    for (const key of dgKeys) {
-      const value = reading[key];
-      const diff = Math.abs(value - median);
-      
-      // If a value is way off from median, try to correct common OCR errors
-      if (diff > threshold && median > 0.5) {
-        // Common OCR errors: 0↔6, leading digit missing (0.52 should be 5.52)
-        const possibleCorrections = [
-          value + Math.floor(median), // Missing leading digit (0.52 → 5.52)
-          value * 10,                  // Missing decimal (0.52 → 5.2)
-          value / 10,                  // Extra decimal (52 → 5.2)
-        ];
-        
-        // Find correction closest to median
-        let bestCorrection = value;
-        let bestDiff = diff;
-        for (const correction of possibleCorrections) {
-          const corrDiff = Math.abs(correction - median);
-          if (corrDiff < bestDiff && corrDiff < threshold) {
-            bestCorrection = correction;
-            bestDiff = corrDiff;
-          }
-        }
-        
-        if (bestCorrection !== value) {
-          console.log(`   🔧 Correcting row ${i + 1} ${key}: ${value} → ${bestCorrection.toFixed(2)} (median: ${median.toFixed(2)})`);
-          (corrected[i] as Record<string, unknown>)[key] = Math.round(bestCorrection * 100) / 100;
-          corrections++;
-        }
-      }
-    }
-    
-    // Rule 2: Settlement continuity - values should increase during loading
-    if (i > 0) {
-      const prevReading = corrected[i - 1];
-      const prevPressure = prevReading.pressure;
-      const currPressure = reading.pressure;
-      
-      // During loading (pressure increasing), settlement should increase
-      if (currPressure > prevPressure) {
-        for (const key of dgKeys) {
-          const prevValue = prevReading[key];
-          const currValue = corrected[i][key];
-          
-          // If current value is much less than previous during loading, it's likely wrong
-          if (currValue < prevValue * 0.5 && prevValue > 0.5) {
-            // Try adding the integer part from previous value
-            const intPart = Math.floor(prevValue);
-            const correctedValue = currValue + intPart;
-            
-            if (Math.abs(correctedValue - prevValue) < Math.abs(currValue - prevValue)) {
-              console.log(`   🔧 Continuity fix row ${i + 1} ${key}: ${currValue} → ${correctedValue.toFixed(2)} (prev: ${prevValue.toFixed(2)})`);
-              (corrected[i] as Record<string, unknown>)[key] = Math.round(correctedValue * 100) / 100;
-              corrections++;
-            }
-          }
-        }
-      }
-    }
-  }
-  
-  if (corrections > 0) {
-    console.log(`   📊 Applied ${corrections} physics-based corrections`);
-  }
-  
-  return corrected;
 }
 
 /**
