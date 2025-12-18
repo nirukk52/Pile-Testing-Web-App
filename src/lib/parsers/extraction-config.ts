@@ -631,34 +631,40 @@ export function buildVisionExtractionPrompt(): string {
     })
     .join('\n');
 
-  return `You are analyzing a pile load test field sheet or report. Extract structured data.
+  return `You are analyzing a pile load test field sheet. Extract ALL data from the handwritten table.
 
-## DOMAIN CONTEXT
-- Pressure gauge readings are in kg/cm² (typical range: 0-600)
-- Dial gauge readings measure settlement in mm (typical range: 0-50mm)
-- 4 dial gauges are used, averaged for settlement
-- Loading phase: pressure increases
-- Unloading phase: pressure decreases
-- Test load for IVPLT = 2.5 × Design Load
+## CRITICAL: EXTRACT EVERY ROW
 
-## CRITICAL RULES (MUST FOLLOW)
+This is a pile load test with ~100+ readings taken over 24-36 hours. The table structure is:
+- Each row = one reading (date, time, pressure, 4 dial gauges)
+- Multiple readings are taken at EACH pressure level (every 15 minutes during holding)
+- Test phases: LOADING (pressure goes up) → HOLDING (pressure stays same, many readings) → UNLOADING (pressure goes down)
 
-1. **TEST DATE**: Extract from the FIRST READING row (where pressure = 0 and all dial gauges = 0).
-   Do NOT use dates from header text - they are often wrong or formatted inconsistently.
+**YOU MUST extract EVERY SINGLE ROW from the table, not just one per pressure level!**
 
-2. **DATE OF CASTING**: This is DIFFERENT from test date. It's when the pile concrete was poured.
-   It should be BEFORE the test date (piles need time to cure before testing).
+Example: At pressure=40, there might be 5 rows:
+- 06:00, 40, 0.12, 0.06, 0.04, 0.02
+- 06:15, 40, 0.19, 0.13, 0.10, 0.10  
+- 06:30, 40, 0.22, 0.15, 0.14, 0.15
+- 06:45, 40, 0.24, 0.16, 0.17, 0.18
+- 07:00, 40, 0.26, 0.19, 0.20, 0.21
 
-3. **CONCRETE GRADE**: Extract only the grade (M25, M30, M35, etc.).
-   If source says "Mixed Design :- M35", extract only "M35".
+Extract ALL 5 rows, not just 1.
 
-4. **NUMERIC VALUES**: Extract only numbers, strip units.
-   "600 mm" → "600", "147 MT" → "147"
+## TABLE COLUMNS
+The table has these columns (left to right):
+1. DATE - format: DD/MM/YYYY or DD/MM/YY
+2. TIME - format: HH:MM (24-hour, e.g., 05:59, 14:30, 22:00)
+3. PRESSURE - kg/cm² (typical: 0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 420)
+4. LOAD - in MT (calculated, you can skip this)
+5. DG1 - Dial Gauge 1 reading in mm (e.g., 0, 0.12, 1.35, 5.62)
+6. DG2 - Dial Gauge 2 reading in mm
+7. DG3 - Dial Gauge 3 reading in mm  
+8. DG4 - Dial Gauge 4 reading in mm
+9. AVG - Average settlement (calculated, skip)
+10. REMARKS - optional text
 
-5. **SEPARATORS**: Remove leading :- or : from values.
-   ":-05-02-2025" → "05-02-2025"
-
-## FIELDS TO EXTRACT
+## PROJECT INFO (from header)
 ${fieldDescriptions}
 
 ## OUTPUT FORMAT (JSON)
@@ -666,35 +672,32 @@ ${fieldDescriptions}
   "projectInfo": {
     "pileId": "TP-01",
     "project": "Project Name",
-    "location": "Site Location",
+    "location": "Site Location", 
     "client": "Client Name",
     "contractor": "Contractor Name",
-    "pileDiameter": "600",
-    "pileDepth": "15",
-    "designLoad": "147",
-    "ramArea": "71.26",
-    "testDate": "05-02-2025",
-    "dateOfCasting": "15-01-2025",
-    "concreteGrade": "M35",
-    "reportNo": "ZG/2025/001"
+    "pileDiameter": "900",
+    "pileDepth": "11.5",
+    "designLoad": "420",
+    "testLoad": "1050",
+    "ramArea": "2551",
+    "testDate": "09-12-2025",
+    "dateOfCasting": "11-09-2025",
+    "concreteGrade": "M40"
   },
   "readings": [
-    {
-      "date": "05-02-2025",
-      "time": "09:00",
-      "pressure": "0",
-      "dg1": "0",
-      "dg2": "0",
-      "dg3": "0",
-      "dg4": "0",
-      "phase": "loading"
-    }
+    {"date": "09-12-2025", "time": "05:59", "pressure": "0", "dg1": "0", "dg2": "0", "dg3": "0", "dg4": "0"},
+    {"date": "09-12-2025", "time": "06:00", "pressure": "40", "dg1": "0.12", "dg2": "0.06", "dg3": "0.04", "dg4": "0.02"}
   ],
-  "confidence": 85,
-  "notes": "Any extraction issues or uncertainties"
+  "confidence": 85
 }
 
-Extract ALL visible readings. If a value is unclear, estimate and note low confidence.`;
+## HANDWRITING TIPS
+- 5 and 6 look similar - check context (time sequence, value progression)
+- 0 and 6 can be confused
+- Decimal points may be faint
+- Time is always in sequence (increasing throughout the test)
+
+REMEMBER: Extract EVERY row. A typical test has 100-120 readings!`;
 }
 
 // =============================================================================
