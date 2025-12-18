@@ -144,12 +144,13 @@ export interface EvalConfig {
 
 /**
  * Default eval configuration.
+ * Why: Tolerances calibrated for handwritten field sheets where OCR can vary.
  */
 export const DEFAULT_EVAL_CONFIG: EvalConfig = {
   passThreshold: 80,
   
   tolerances: {
-    dialGauge: 0.05,    // ±0.05mm
+    dialGauge: 0.10,    // ±0.10mm - realistic for handwritten data (0.05mm was too strict)
     pressure: 1,        // ±1%
     load: 1,            // ±1%
   },

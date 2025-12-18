@@ -105,28 +105,44 @@ async function extractPageReadings(
   const prompt = isFirstPage
     ? `Extract ALL data from this pile test field sheet page ${pageNum}/${totalPages}.
 
-This page contains the HEADER with project info AND the start of the readings table.
+## HEADER DATA (from top of page)
+Extract: pileId, project, location, client, contractor, pileDiameter, pileDepth, designLoad, testLoad, ramArea, concreteGrade, testDate, dateOfCasting
 
-Extract:
-1. Project info: pileId, project, location, client, contractor, pileDiameter, pileDepth, designLoad, testLoad, ramArea, concreteGrade, testDate, dateOfCasting
-2. ALL reading rows visible on this page
+## READINGS TABLE
+Extract EVERY row. Each row: date (DD/MM/YYYY), time (HH:MM), pressure (kg/cm²), dg1, dg2, dg3, dg4 (mm)
 
-Each reading has: date (DD/MM/YYYY), time (HH:MM), pressure (kg/cm²), dg1, dg2, dg3, dg4 (all in mm)
+## PHYSICS VALIDATION RULES
+- First row is ALWAYS: pressure=0, all dg=0 (loading start)
+- ALL 4 dial gauges should be CLOSE to each other (within ~0.5mm)
+  - If dg1=0.19, dg2=0.13, dg3=0.10, dg4=0.06 → OK (all similar)
+  - If dg1=0.19, dg2=0.13, dg3=0.10, dg4=0.06 but you read dg4 as 0.60 → WRONG, should be 0.06
+- Handwriting: 0↔6 often confused, 5↔S, 1↔7
 
 Return JSON:
 {
-  "projectInfo": { ... },
+  "projectInfo": { "pileId": "...", "project": "...", ... },
   "readings": [{ "date": "...", "time": "...", "pressure": "...", "dg1": "...", "dg2": "...", "dg3": "...", "dg4": "..." }, ...]
 }`
     : `Extract ALL reading rows from this pile test data table (page ${pageNum}/${totalPages}).
 
-This page contains ONLY data rows, no header info.
+## COLUMN LAYOUT (left to right)
+1. DATE - DD/MM/YYYY or blank
+2. TIME - HH:MM (24-hour)
+3. PRESSURE - kg/cm² - **ALWAYS whole numbers: 0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 420**
+4. LOAD IN MT - decimal numbers like 102.04, 204.08, 306.12 - **SKIP THIS COLUMN**
+5. DG1 (Reading 1) - dial gauge in mm
+6. DG2 (Reading 2) - dial gauge in mm
+7. DG3 (Reading 3) - dial gauge in mm
+8. DG4 (Reading 4) - dial gauge in mm
 
-Extract EVERY visible row. Each row has:
-- date (DD/MM/YYYY) 
-- time (HH:MM)
-- pressure (kg/cm²) - values like 0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 420
-- dg1, dg2, dg3, dg4 (dial gauge readings in mm, e.g., 0, 0.12, 1.35, 5.62)
+## CRITICAL: PRESSURE vs LOAD
+- PRESSURE column has whole numbers: 0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 420
+- LOAD column has decimals: 102.04, 204.08, 306.12, 408.16, 510.20, 612.24, 714.28...
+- **Extract PRESSURE (whole numbers), NOT LOAD (decimals)**
+
+## PHYSICS RULES
+- ALL 4 dial gauges should be CLOSE to each other (within ~0.5mm)
+- Handwriting: 0↔6 confused, 5↔S, 1↔7
 
 Return JSON:
 {
@@ -267,13 +283,138 @@ function transformVisionResponseToExtractedData(response: {
     });
   }
 
+  // Apply physics-based validation and correction
+  const correctedReadings = validateAndCorrectReadings(readings);
+  
   return {
     projectInfo,
-    readings,
+    readings: correctedReadings,
     confidence,
     extractedAt: new Date().toISOString(),
     model: 'gpt-4o',
   };
+}
+
+/**
+ * Valid pressure values for pile load tests (kg/cm²).
+ * Why: Standard test uses 40 kg/cm² increments. If we see decimals, model extracted LOAD instead of PRESSURE.
+ */
+const VALID_PRESSURE_VALUES = [0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 420];
+
+/**
+ * Validates and corrects readings using physics rules.
+ * Why: Handwriting OCR often misreads digits (0↔6, 5↔6, 1↔7).
+ * Physics rules can detect and correct these errors.
+ */
+function validateAndCorrectReadings(readings: ExtractedData['readings']): ExtractedData['readings'] {
+  if (readings.length === 0) return readings;
+  
+  const corrected = [...readings];
+  let corrections = 0;
+  
+  for (let i = 0; i < corrected.length; i++) {
+    const reading = corrected[i];
+    
+    // Rule 0: Check if pressure looks like LOAD value (decimals instead of whole numbers)
+    // Load values are: pressure × ramArea / 1000 ≈ 102.04, 204.08, 306.12, 408.16...
+    // Pressure values are: 0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 420
+    const pressure = reading.pressure;
+    if (pressure > 0 && !VALID_PRESSURE_VALUES.includes(pressure)) {
+      // Find closest valid pressure (model might have read LOAD column)
+      const closest = VALID_PRESSURE_VALUES.reduce((prev, curr) => 
+        Math.abs(curr - pressure) < Math.abs(prev - pressure) ? curr : prev
+      );
+      
+      // If pressure is a decimal or doesn't match standard values, try to correct
+      if (!Number.isInteger(pressure) || Math.abs(closest - pressure) > 5) {
+        // Check if this looks like a load value (approximately pressure * 2.551)
+        const inferredPressure = Math.round(pressure / 2.551 * 10) / 10;
+        const nearestStandard = VALID_PRESSURE_VALUES.reduce((prev, curr) => 
+          Math.abs(curr - inferredPressure * 10) < Math.abs(prev - inferredPressure * 10) ? curr : prev
+        );
+        
+        if (VALID_PRESSURE_VALUES.includes(nearestStandard)) {
+          console.log(`   🔧 Pressure fix row ${i + 1}: ${pressure} → ${nearestStandard} (detected load value)`);
+          corrected[i].pressure = nearestStandard;
+          corrections++;
+        }
+      }
+    }
+    
+    const gauges = [reading.dg1, reading.dg2, reading.dg3, reading.dg4];
+    
+    // Rule 1: All 4 gauges should be close to each other (within ~1mm typically)
+    const median = gauges.sort((a, b) => a - b)[Math.floor(gauges.length / 2)];
+    const threshold = Math.max(0.5, median * 0.3); // 30% or 0.5mm minimum
+    
+    // Check each gauge against the median
+    const dgKeys = ['dg1', 'dg2', 'dg3', 'dg4'] as const;
+    for (const key of dgKeys) {
+      const value = reading[key];
+      const diff = Math.abs(value - median);
+      
+      // If a value is way off from median, try to correct common OCR errors
+      if (diff > threshold && median > 0.5) {
+        // Common OCR errors: 0↔6, leading digit missing (0.52 should be 5.52)
+        const possibleCorrections = [
+          value + Math.floor(median), // Missing leading digit (0.52 → 5.52)
+          value * 10,                  // Missing decimal (0.52 → 5.2)
+          value / 10,                  // Extra decimal (52 → 5.2)
+        ];
+        
+        // Find correction closest to median
+        let bestCorrection = value;
+        let bestDiff = diff;
+        for (const correction of possibleCorrections) {
+          const corrDiff = Math.abs(correction - median);
+          if (corrDiff < bestDiff && corrDiff < threshold) {
+            bestCorrection = correction;
+            bestDiff = corrDiff;
+          }
+        }
+        
+        if (bestCorrection !== value) {
+          console.log(`   🔧 Correcting row ${i + 1} ${key}: ${value} → ${bestCorrection.toFixed(2)} (median: ${median.toFixed(2)})`);
+          (corrected[i] as Record<string, unknown>)[key] = Math.round(bestCorrection * 100) / 100;
+          corrections++;
+        }
+      }
+    }
+    
+    // Rule 2: Settlement continuity - values should increase during loading
+    if (i > 0) {
+      const prevReading = corrected[i - 1];
+      const prevPressure = prevReading.pressure;
+      const currPressure = reading.pressure;
+      
+      // During loading (pressure increasing), settlement should increase
+      if (currPressure > prevPressure) {
+        for (const key of dgKeys) {
+          const prevValue = prevReading[key];
+          const currValue = corrected[i][key];
+          
+          // If current value is much less than previous during loading, it's likely wrong
+          if (currValue < prevValue * 0.5 && prevValue > 0.5) {
+            // Try adding the integer part from previous value
+            const intPart = Math.floor(prevValue);
+            const correctedValue = currValue + intPart;
+            
+            if (Math.abs(correctedValue - prevValue) < Math.abs(currValue - prevValue)) {
+              console.log(`   🔧 Continuity fix row ${i + 1} ${key}: ${currValue} → ${correctedValue.toFixed(2)} (prev: ${prevValue.toFixed(2)})`);
+              (corrected[i] as Record<string, unknown>)[key] = Math.round(correctedValue * 100) / 100;
+              corrections++;
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  if (corrections > 0) {
+    console.log(`   📊 Applied ${corrections} physics-based corrections`);
+  }
+  
+  return corrected;
 }
 
 /**

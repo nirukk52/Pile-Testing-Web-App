@@ -631,43 +631,57 @@ export function buildVisionExtractionPrompt(): string {
     })
     .join('\n');
 
-  return `You are analyzing a pile load test field sheet. Extract ALL data from the handwritten table.
+  return `You are an expert Geotechnical Engineer analyzing a pile load test field sheet. Extract ALL data with PHYSICS-AWARE validation.
 
-## CRITICAL: EXTRACT EVERY ROW
+**The stakes are high: Inaccurate data can lead to structural failure. Precision is paramount.**
 
-This is a pile load test with ~100+ readings taken over 24-36 hours. The table structure is:
-- Each row = one reading (date, time, pressure, 4 dial gauges)
-- Multiple readings are taken at EACH pressure level (every 15 minutes during holding)
-- Test phases: LOADING (pressure goes up) → HOLDING (pressure stays same, many readings) → UNLOADING (pressure goes down)
+## PHYSICS RULES FOR VALIDATION (Use these to verify/correct OCR)
 
-**YOU MUST extract EVERY SINGLE ROW from the table, not just one per pressure level!**
+### 1. TEST PHASES - Detected by pressure pattern
+- **LOADING**: Pressure INCREASES (0→40→80→120→160→200→240→280→320→360→400→420)
+- **HOLDING**: Pressure STAYS SAME for multiple readings (5 readings at each level)
+- **UNLOADING**: Pressure DECREASES (420→400→360→320→280→240→200→160→120→80→40→0)
+- First reading is ALWAYS Loading (pressure=0, all dg=0)
 
-Example: At pressure=40, there might be 5 rows:
-- 06:00, 40, 0.12, 0.06, 0.04, 0.02
-- 06:15, 40, 0.19, 0.13, 0.10, 0.10  
-- 06:30, 40, 0.22, 0.15, 0.14, 0.15
-- 06:45, 40, 0.24, 0.16, 0.17, 0.18
-- 07:00, 40, 0.26, 0.19, 0.20, 0.21
+### 2. SETTLEMENT CONTINUITY (Critical for error correction!)
+- **During LOADING**: Dial gauge values INCREASE as pressure increases
+  - If pressure doubles, settlement roughly doubles (not exact, but trending up)
+- **During HOLDING**: Settlement increases VERY SLOWLY (creep ~0.01-0.05mm per reading)
+- **During UNLOADING**: Settlement DECREASES (rebound)
+- **ALL 4 GAUGES should be CLOSE to each other** (within ~0.5mm typically)
+  - If dg1=5.45, dg2=5.52, dg3=5.38, dg4=5.41 → makes sense
+  - If dg1=5.45, dg2=0.52, dg3=5.38, dg4=5.41 → dg2 is WRONG (likely 5.52)
 
-Extract ALL 5 rows, not just 1.
+### 3. CHRONOLOGY
+- Time ALWAYS moves forward (15min, 30min, or 1hr intervals typical)
+- If you see "10:30", "10:45", "19:00" → the "19:00" is likely "11:00" (OCR error)
 
-## TABLE COLUMNS
-The table has these columns (left to right):
-1. DATE - format: DD/MM/YYYY or DD/MM/YY
-2. TIME - format: HH:MM (24-hour, e.g., 05:59, 14:30, 22:00)
-3. PRESSURE - kg/cm² (typical: 0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 420)
-4. LOAD - in MT (calculated, you can skip this)
-5. DG1 - Dial Gauge 1 reading in mm (e.g., 0, 0.12, 1.35, 5.62)
-6. DG2 - Dial Gauge 2 reading in mm
-7. DG3 - Dial Gauge 3 reading in mm  
-8. DG4 - Dial Gauge 4 reading in mm
-9. AVG - Average settlement (calculated, skip)
-10. REMARKS - optional text
+### 4. DIGIT DISAMBIGUATION (Handwriting OCR errors)
+- "0" often looks like "6", "C", or "-"
+- "5" often looks like "S" or "6"
+- "1" often looks like "7" or "|"
+- "8" often looks like "3"
+- Rule: If a value breaks physics continuity, it's probably an OCR misread
 
-## PROJECT INFO (from header)
+## EXAMPLE: Using physics to correct errors
+Row 10: pressure=160, dg1=1.32, dg2=1.20, dg3=1.27, dg4=1.25
+Row 11: pressure=160, dg1=1.34, dg2=1.24, dg3=1.30, dg4=1.28  
+Row 12: pressure=160, dg1=1.35, dg2=1.26, dg3=0.35, dg4=1.27 ← dg3=0.35 is WRONG!
+  → Should be 1.35 (all other values ~1.3, and 0→1 is common OCR error)
+
+## TABLE COLUMNS (left to right)
+1. DATE - DD/MM/YYYY or DD/MM/YY
+2. TIME - HH:MM (24-hour)
+3. PRESSURE - kg/cm² (0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 420)
+4. LOAD - MT (skip, calculated)
+5. DG1, DG2, DG3, DG4 - Dial gauges in mm (0.00 to ~10.00)
+6. AVG - skip
+7. REMARKS - optional
+
+## PROJECT INFO (header)
 ${fieldDescriptions}
 
-## OUTPUT FORMAT (JSON)
+## OUTPUT FORMAT
 {
   "projectInfo": {
     "pileId": "TP-01",
@@ -685,19 +699,13 @@ ${fieldDescriptions}
     "concreteGrade": "M40"
   },
   "readings": [
-    {"date": "09-12-2025", "time": "05:59", "pressure": "0", "dg1": "0", "dg2": "0", "dg3": "0", "dg4": "0"},
-    {"date": "09-12-2025", "time": "06:00", "pressure": "40", "dg1": "0.12", "dg2": "0.06", "dg3": "0.04", "dg4": "0.02"}
+    {"date": "09-12-2025", "time": "05:59", "pressure": "0", "dg1": "0", "dg2": "0", "dg3": "0", "dg4": "0", "phase": "loading"},
+    {"date": "09-12-2025", "time": "06:00", "pressure": "40", "dg1": "0.12", "dg2": "0.06", "dg3": "0.04", "dg4": "0.02", "phase": "loading"}
   ],
   "confidence": 85
 }
 
-## HANDWRITING TIPS
-- 5 and 6 look similar - check context (time sequence, value progression)
-- 0 and 6 can be confused
-- Decimal points may be faint
-- Time is always in sequence (increasing throughout the test)
-
-REMEMBER: Extract EVERY row. A typical test has 100-120 readings!`;
+Extract EVERY row (~100-120 readings). Use physics rules to validate and correct OCR errors!`;
 }
 
 // =============================================================================
