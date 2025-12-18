@@ -399,9 +399,10 @@ export interface PileTestSummary {
 
 /**
  * Current step in the test workflow.
- * Why: Tracks user progress through details → entry → report screens.
+ * Why: Tracks user progress through upload → details → entry → report screens.
+ * 'upload' is first tab - upload field sheet PDFs for AI extraction.
  */
-export type WorkflowStep = 'details' | 'entry' | 'images' | 'certificates' | 'report';
+export type WorkflowStep = 'upload' | 'details' | 'entry' | 'images' | 'certificates' | 'report';
 
 /**
  * Current view in the app.

@@ -100,7 +100,7 @@ interface TestActions {
 const initialState: TestState = {
   view: 'home',
   currentTestId: null,
-  currentStep: 'details',
+  currentStep: 'upload',
   allTests: [],
   projectInfo: EMPTY_PROJECT_INFO,
   loadEntries: [],
@@ -214,7 +214,7 @@ export const useTestStore = create<TestState & TestActions>()((set, get) => ({
       loadEntries: [],
       supabaseProjectId: null,
       supabaseTestId: null,
-      currentStep: 'details',
+      currentStep: 'upload',
       view: 'test',
     });
   },
