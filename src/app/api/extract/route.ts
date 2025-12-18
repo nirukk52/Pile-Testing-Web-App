@@ -5,6 +5,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 import sharp from 'sharp';
 import { runAgentSwarm, type AgentSwarmResult } from '@/lib/ai/agent-swarm';
 
@@ -26,12 +29,13 @@ async function cropToContent(imageBuffer: Buffer): Promise<Buffer> {
 /**
  * Converts PDF pages to base64 PNG images with content cropping.
  * Why: Vision API only accepts images, not PDFs directly.
+ * Uses file path because pdf-to-img works better with paths in Next.js.
  */
-async function convertPdfToImages(pdfBuffer: Buffer): Promise<string[]> {
+async function convertPdfToImages(pdfPath: string): Promise<string[]> {
   const { pdf } = await import('pdf-to-img');
   
   const images: string[] = [];
-  const document = await pdf(pdfBuffer, { scale: 2.0 });
+  const document = await pdf(pdfPath, { scale: 2.0 });
   
   for await (const page of document) {
     const croppedBuffer = await cropToContent(page);
@@ -42,7 +46,15 @@ async function convertPdfToImages(pdfBuffer: Buffer): Promise<string[]> {
   return images;
 }
 
+/**
+ * Force Node.js runtime for this route.
+ * Why: pdf-to-img requires Node.js APIs that aren't available in Edge runtime.
+ */
+export const runtime = 'nodejs';
+
 export async function POST(request: NextRequest) {
+  let tempFilePath: string | null = null;
+  
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
@@ -68,13 +80,16 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Convert file to buffer
+    // Save PDF to temp file (pdf-to-img works better with file paths)
     const arrayBuffer = await file.arrayBuffer();
     const pdfBuffer = Buffer.from(arrayBuffer);
     
+    tempFilePath = path.join(os.tmpdir(), `extract-${Date.now()}.pdf`);
+    fs.writeFileSync(tempFilePath, pdfBuffer);
+    
     // Convert PDF to images
     console.log('📄 Converting PDF to images...');
-    const pageImages = await convertPdfToImages(pdfBuffer);
+    const pageImages = await convertPdfToImages(tempFilePath);
     console.log(`📄 Converted ${pageImages.length} pages`);
     
     // Run agent swarm extraction
@@ -87,5 +102,14 @@ export async function POST(request: NextRequest) {
       { error: error instanceof Error ? error.message : 'Extraction failed' },
       { status: 500 }
     );
+  } finally {
+    // Clean up temp file
+    if (tempFilePath && fs.existsSync(tempFilePath)) {
+      try {
+        fs.unlinkSync(tempFilePath);
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
   }
 }
