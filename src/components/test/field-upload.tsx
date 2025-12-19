@@ -133,6 +133,33 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
         const pressure = reading.pressure;
         const load = ramArea > 0 ? ((pressure * ramArea) / 1000).toFixed(2) : '0';
         
+        // Create a valid timestamp from extracted date/time
+        // Extracted dates may be in formats like "9/12/15", "10-12-23", etc.
+        let timestamp = new Date().toISOString();
+        if (reading.date && reading.time) {
+          try {
+            // Try to parse the date - handle various formats
+            const dateStr = reading.date;
+            const timeStr = reading.time;
+            
+            // Try creating a date directly first
+            const testDate = new Date(`${dateStr} ${timeStr}`);
+            if (!isNaN(testDate.getTime())) {
+              timestamp = testDate.toISOString();
+            } else {
+              // Fall back to current date with the extracted time
+              const today = new Date();
+              const [hours, minutes] = timeStr.split(':').map(Number);
+              if (!isNaN(hours) && !isNaN(minutes)) {
+                today.setHours(hours, minutes, 0, 0);
+                timestamp = today.toISOString();
+              }
+            }
+          } catch {
+            // Keep default timestamp
+          }
+        }
+        
         const legacyReading: LegacyReading = {
           id: `extracted-${Date.now()}-${index}`,
           pressureGauge: String(pressure),
@@ -145,9 +172,7 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
           dg2Enabled: true,
           dg3Enabled: true,
           dg4Enabled: true,
-          timestamp: reading.time 
-            ? `${reading.date || new Date().toISOString().split('T')[0]}T${reading.time}:00`
-            : new Date().toISOString(),
+          timestamp,
           phase: 'loading', // Will be auto-detected in data entry
           remark: reading.confidence === 'low' ? '⚠️ Low confidence' : '',
         };

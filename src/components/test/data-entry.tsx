@@ -51,7 +51,18 @@ function getDefaultsFromLastReading(loadEntries: LoadEntry[]) {
 
   const lastEntry = loadEntries[loadEntries.length - 1];
   const lastReading = lastEntry.readings[0];
-  const lastDate = new Date(lastReading.timestamp);
+  
+  // Safely parse the timestamp - it might be invalid from extraction
+  let lastDate: Date;
+  try {
+    lastDate = new Date(lastReading.timestamp);
+    // Check if the date is valid
+    if (isNaN(lastDate.getTime())) {
+      lastDate = now;
+    }
+  } catch {
+    lastDate = now;
+  }
 
   return {
     date: lastDate.toISOString().split('T')[0],
