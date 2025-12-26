@@ -1,11 +1,13 @@
 /**
- * Agent Swarm for Field Sheet Extraction
- * Why: Multiple specialized agents working in parallel for accuracy and speed.
+ * Agent Swarm for Field Sheet Extraction (v2 - Two Agent Architecture)
+ * Why: Two specialized agents running in parallel for accuracy and speed.
  * 
  * Architecture:
- * 1. Page Agents - extract readings in parallel (one per page)
- * 2. Project Info Verifier - majority vote on project info from all pages
- * 3. Readings Verifier - validates avgSettlement (±0.05mm), sets confidence, infers pressure
+ * 1. Project Info Agent - extracts header data from all pages
+ * 2. Readings Agent - extracts all readings from all pages sequentially
+ * 
+ * Both agents receive ALL pages together to maintain context.
+ * Model: Gemini 2.5 Pro for accuracy and higher output limits
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -51,6 +53,7 @@ export interface ExtractedReadingWithConfidence {
   confidence: ConfidenceLevel; // Overall row confidence
   fieldConfidence: FieldConfidence; // Per-field confidence
   avgDiff: number;             // |extractedAvg - calculatedAvg|
+  phase?: 'loading' | 'holding' | 'unloading'; // Test phase
   isEmpty?: boolean;           // True if this is a placeholder for missing row
 }
 
@@ -79,33 +82,18 @@ export interface AgentSwarmResult {
   model: string;
 }
 
-/**
- * Raw page extraction result before verification.
- */
-interface PageExtractionResult {
-  pageNum: number;
-  projectInfo?: Record<string, string>;
-  readings: Array<Record<string, string>>;
-}
-
 // =============================================================================
-// AGENT 1: PAGE AGENTS (Parallel)
+// PROMPTS
 // =============================================================================
 
 /**
- * Page Agent - extracts all data from a single page.
- * Why: Each page processed independently in parallel for speed.
+ * Project Info Agent Prompt
+ * Why: Focused solely on extracting header metadata from all pages.
  */
-async function runPageAgent(
-  model: any,
-  pageImage: string,
-  pageNum: number,
-  totalPages: number
-): Promise<PageExtractionResult> {
-  const isFirstPage = pageNum === 1;
-  
-  const prompt = isFirstPage
-    ? `Extract ALL data from this pile test field sheet page ${pageNum}/${totalPages}.
+const PROJECT_INFO_PROMPT = `You are an expert Geotechnical Engineer extracting project metadata from pile load test field sheets.
+
+## TASK
+Extract project information from the header section of these field sheet pages. The header is typically on Page 1 but may appear on other pages too.
 
 ## HEADER LAYOUT (ZedGeo field sheet format)
 The header follows this EXACT layout - extract each field from its labeled position:
@@ -113,315 +101,179 @@ The header follows this EXACT layout - extract each field from its labeled posit
 +----------------------------------------------------------------------------------------------------------------+
 | ZedGeo Systems Private Limited., Mumbai.                                                        PAGE:- {pageNo}|
 |                                                                                                                |
-| RECORD OF PILE LOAD TEST NO.: {pileId}  | L.C OF DIAL GAUGE:- {lcDialGauge} | RAM AREA:- {ramArea}             |
+| RECORD OF PILE LOAD TEST NO.: {pileId}  | L.C OF DIAL GAUGE:- {lcDialGauge} | RAM AREA:- {ramArea} cm²        |
 |                                         | TYPE OF TEST:- {testType}         | DATE OF CASTING:- {dateOfCasting}|
-| PROJECT:- {project}                     | DESIGN LOAD:- {designLoad}        | PILE DEPTH:- {pileDepth}         |
-|                                         | TEST LOAD:- {testLoad}            |                                  |
+| PROJECT:- {project}                     | DESIGN LOAD:- {designLoad} T      | PILE DEPTH:- {pileDepth} M       |
+|                                         | TEST LOAD:- {testLoad} T          |                                  |
 | LOCATION:- {location}                   | MIXED DESIGN:- {concreteGrade}    |                                  |
-|                                         | PILE DIAMETER:- {pileDiameter}    |                                  |
+|                                         | PILE DIAMETER:- {pileDiameter} mm |                                  |
 | CLIENTS NAME:- {client}                 |                                   |                                  |
 | CONSULTANT:- {consultant}               |                                   |                                  |
 | CONTRACTOR:- {contractor}               |                                   |                                  |
 +----------------------------------------------------------------------------------------------------------------+
 
-## FIELD EXTRACTION HINTS
-- pileId: After "RECORD OF PILE LOAD TEST NO.:" (e.g., TP-01, TP-02) - this is NOT reportNo
+## FIELD EXTRACTION RULES
+- pileId: After "RECORD OF PILE LOAD TEST NO.:" (e.g., TP-01, TP-02) - NOT the same as reportNo
 - project: After "PROJECT:-" - may span multiple lines
 - location: After "LOCATION:-" - building/wing info
 - client: After "CLIENTS NAME:-" (e.g., "TATA Project")
 - contractor: After "CONTRACTOR:-" - if EMPTY or blank, return "NA"
-- pileDiameter: After "PILE DIAMETER:-" - number in mm (e.g., 900)
+- consultant: After "CONSULTANT:-" - if EMPTY or blank, return "NA"
+- pileDiameter: After "PILE DIAMETER:-" - number only in mm (e.g., 900)
 - pileDepth: After "PILE DEPTH:-" - PRESERVE DECIMALS (e.g., 11.51, 10.31) - may have "M" suffix
-- designLoad: After "DESIGN LOAD:-" - number in tons (e.g., 420)
-- testLoad: After "TEST LOAD:-" - number in tons (e.g., 1050)
-- ramArea: After "RAM AREA:-" - number in cm² (e.g., 2551)
-- concreteGrade: After "MIXED DESIGN:-" (e.g., M25, M40)
-- dateOfCasting: After "DATE OF CASTING:-" - date format DD-MM-YY or DD/MM/YYYY
-- testDate: Get from first reading row's date column
+- designLoad: After "DESIGN LOAD:-" - number only in tons (e.g., 420)
+- testLoad: After "TEST LOAD:-" - number only in tons (e.g., 1050)
+- ramArea: After "RAM AREA:-" - number only in cm² (e.g., 2551)
+- concreteGrade: After "MIXED DESIGN:-" (e.g., M25, M40) - just the grade code
+- dateOfCasting: After "DATE OF CASTING:-" - convert to YYYY-MM-DD format
+- testDate: Get from the DATE column of the FIRST reading row (0 pressure row)
+- testType: After "TYPE OF TEST:-" (e.g., IVPLT, RVPLT, Lateral, Uplift)
+- lcDialGauge: After "L.C OF DIAL GAUGE:-" (e.g., 0.01 mm)
 
-## READINGS TABLE
-Extract EVERY row with columns: date, time, pressure, dg1, dg2, dg3, dg4, avg
+## DATE FORMAT RULES
+- Input may be: DD-MM-YY, DD/MM/YY, D/M/YY, DD-MM-YYYY
+- Output MUST be: YYYY-MM-DD (ISO format)
+- Example: "11-9-25" → "2025-09-11" (11 Sept 2025)
+- Example: "9/12/25" → "2025-12-09" (9 Dec 2025)
 
-Return JSON:
+## OUTPUT FORMAT
+Return ONLY valid JSON (no markdown):
 {
-  "projectInfo": { "pileId": "...", "project": "...", "contractor": "NA", "pileDepth": "11.51", ... },
-  "readings": [{ "date": "...", "time": "...", "pressure": "...", "dg1": "...", "dg2": "...", "dg3": "...", "dg4": "...", "avg": "..." }, ...]
-}`
-    : `Extract ALL reading rows from this pile test data table (page ${pageNum}/${totalPages}).
+  "pileId": "TP-01",
+  "reportNo": null,
+  "project": "BDD CHAWLS Redevelopment Project, Worli Mumbai",
+  "location": "Building-3 Wing-",
+  "client": "TATA Project",
+  "contractor": "NA",
+  "consultant": "NA",
+  "pileDiameter": 900,
+  "pileDepth": 11.51,
+  "designLoad": 420,
+  "testLoad": 1050,
+  "ramArea": 2551,
+  "concreteGrade": "M40",
+  "testDate": "2025-12-09",
+  "dateOfCasting": "2025-09-11",
+  "testType": "IVPLT",
+  "lcDialGauge": "0.01"
+}
 
-Extract project info if visible in header area (look for pileId, reportNo, project, client, contractor, etc.)
+Extract data from ALL provided pages and cross-verify. If values differ between pages, use the most complete/legible one.`;
 
-## COLUMNS
-- date, time, pressure (whole numbers: 0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 420)
-- dg1, dg2, dg3, dg4 (dial gauge readings in mm)
-- avg (average settlement - extract this!)
+/**
+ * Readings Agent Prompt
+ * Why: Focused solely on extracting readings with physics-aware validation.
+ */
+const READINGS_PROMPT = `You are an expert Geotechnical Engineer extracting pile load test readings from handwritten field sheets.
 
-Return JSON:
+## TASK
+Extract ALL readings from these field sheet pages into a single sequential list. The readings span multiple pages and must be combined in chronological order.
+
+## TABLE COLUMNS (left to right)
+| Column | Description | Examples |
+|--------|-------------|----------|
+| DATE | Date in DD/MM/YY format | 9/12/25, 10/12/25 |
+| TIME | Time in HH:MM 24-hour format | 11:29, 14:30 |
+| PRESSURE | Gauge reading in kg/cm² | 0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 420 |
+| LOAD IN MT | Calculated load (skip - we calculate from pressure) | |
+| Reading 1-4 | Dial gauge readings in mm (DG1, DG2, DG3, DG4) | 0, 0.12, 1.35, 5.45 |
+| Average | Average settlement (extract for validation) | 0, 0.06, 1.30 |
+| REMARK | May indicate *Loading*, *Holding*, *Unloading* | |
+
+## PHYSICS RULES FOR VALIDATION (Use these to detect and correct OCR errors!)
+
+### 1. TEST PHASES - Detected by pressure pattern
+- **LOADING**: Pressure INCREASES (0→40→80→120→160→200→240→280→320→360→400→420)
+  - First reading is ALWAYS pressure=0 with all dial gauges at 0 or near 0
+  - Each pressure step has ~5 readings before stepping up
+- **HOLDING**: Pressure STAYS SAME at maximum for extended time (usually 24 hours)
+  - Many readings at the same high pressure (e.g., 420)
+- **UNLOADING**: Pressure DECREASES (420→360→320→280→240→200→160→120→80→40→0)
+  - Settlement decreases (rebound)
+
+### 2. TIME CONTINUITY (Critical!)
+- Time ALWAYS moves forward
+- Typical intervals: 15 minutes during loading, may be hourly during holding
+- If you see "10:30", "10:45", "19:00" → the "19:00" is likely "11:00" (OCR error with 1→9)
+- If time jumps backwards, it's an OCR error - correct it logically
+
+### 3. SETTLEMENT CONTINUITY
+- **During LOADING**: Dial gauge values INCREASE as pressure increases
+- **During HOLDING**: Settlement increases VERY SLOWLY (creep, ~0.01-0.05mm per reading)
+- **During UNLOADING**: Settlement DECREASES (rebound)
+- **ALL 4 GAUGES should be CLOSE** (within ~0.5mm typically)
+  - If dg1=5.45, dg2=5.52, dg3=5.38, dg4=5.41 → makes sense
+  - If dg1=5.45, dg2=0.52, dg3=5.38, dg4=5.41 → dg2 is WRONG (likely 5.52, leading 0→5 error)
+
+### 4. DIGIT DISAMBIGUATION (Common OCR errors)
+- "0" often misread as "6", "C", or "-"
+- "5" often misread as "S" or "6"
+- "1" often misread as "7", "|", or "9"
+- "8" often misread as "3"
+- A dash "-" in dial gauge means 0.00 (only valid for first reading)
+
+### 5. EXAMPLE: Using physics to correct errors
+Row 10: pressure=160, dg1=1.32, dg2=1.20, dg3=1.27, dg4=1.25 (avg ~1.26)
+Row 11: pressure=160, dg1=1.34, dg2=1.24, dg3=1.30, dg4=1.28 (avg ~1.29)
+Row 12: pressure=160, dg1=1.35, dg2=1.26, dg3=0.35, dg4=1.27 ← dg3=0.35 is WRONG!
+  → Should be 1.35 (all other values ~1.3, and 0→1 is common OCR error)
+
+## DATE FORMAT RULES
+- Output dates in YYYY-MM-DD format
+- "9/12/25" → "2025-12-09" (9 December 2025)
+- If date is same as previous row, you can copy it
+
+## PHASE DETECTION
+Infer phase from pressure pattern:
+- If pressure > previous pressure → "loading"
+- If pressure == previous pressure → "holding"  
+- If pressure < previous pressure → "unloading"
+
+## OUTPUT FORMAT
+Return ONLY valid JSON (no markdown):
 {
-  "projectInfo": { "pileId": "...", "reportNo": "...", ... } or null,
-  "readings": [{ "date": "...", "time": "...", "pressure": "...", "dg1": "...", "dg2": "...", "dg3": "...", "dg4": "...", "avg": "..." }, ...]
-}`;
-
-  const result = await model.generateContent([
+  "readings": [
     {
-      inlineData: {
-        data: pageImage,
-        mimeType: 'image/png',
-      },
+      "date": "2025-12-09",
+      "time": "11:29",
+      "pressure": 0,
+      "dg1": 0,
+      "dg2": 0,
+      "dg3": 0,
+      "dg4": 0,
+      "avg": 0,
+      "phase": "loading",
+      "remark": null
     },
-    prompt,
-  ]);
-
-  const response = await result.response;
-  const content = response.text();
-  
-  if (!content) {
-    return { pageNum, readings: [] };
-  }
-
-  // Extract JSON from response (Gemini may wrap in markdown)
-  const jsonMatch = content.match(/\{[\s\S]*\}/);
-  const jsonContent = jsonMatch ? jsonMatch[0] : content;
-  const parsed = JSON.parse(jsonContent);
-  
-  return {
-    pageNum,
-    projectInfo: parsed.projectInfo || undefined,
-    readings: parsed.readings || [],
-  };
+    {
+      "date": "2025-12-09",
+      "time": "11:30",
+      "pressure": 40,
+      "dg1": 0.12,
+      "dg2": 0.06,
+      "dg3": 0.04,
+      "dg4": 0.02,
+      "avg": 0.06,
+      "phase": "loading",
+      "remark": null
+    }
+  ]
 }
 
-// =============================================================================
-// AGENT 2: PROJECT INFO VERIFIER
-// =============================================================================
-
-/**
- * Project Info Verifier Agent - uses majority voting across all pages.
- * Why: Different pages may extract different values; majority vote picks the most common.
- */
-function runProjectInfoVerifier(
-  pageResults: PageExtractionResult[]
-): ProjectInfoWithConfidence {
-  console.log('   🔍 Project Info Verifier: Running majority vote...');
-  
-  const fields: (keyof ExpectedProjectInfo)[] = [
-    'pileId', 'reportNo', 'project', 'location', 'client', 'contractor',
-    'pileDiameter', 'pileDepth', 'designLoad', 'testLoad', 'ramArea',
-    'concreteGrade', 'testDate', 'dateOfCasting'
-  ];
-  
-  // Collect all values for each field
-  const votes: Record<string, string[]> = {};
-  for (const field of fields) {
-    votes[field] = [];
-  }
-  
-  for (const result of pageResults) {
-    if (result.projectInfo) {
-      for (const field of fields) {
-        const value = result.projectInfo[field];
-        if (value !== undefined && value !== null && value !== '') {
-          votes[field].push(String(value));
-        }
-      }
-    }
-  }
-  
-  // Majority vote for each field
-  const finalValues: Partial<ExpectedProjectInfo> = {};
-  const confidence: Record<string, ConfidenceLevel> = {};
-  
-  for (const field of fields) {
-    const fieldVotes = votes[field];
-    if (fieldVotes.length === 0) {
-      confidence[field] = 'low';
-      continue;
-    }
-    
-    // Count occurrences
-    const counts: Record<string, number> = {};
-    for (const v of fieldVotes) {
-      counts[v] = (counts[v] || 0) + 1;
-    }
-    
-    // Find majority
-    let maxCount = 0;
-    let winner = '';
-    for (const [value, count] of Object.entries(counts)) {
-      if (count > maxCount) {
-        maxCount = count;
-        winner = value;
-      }
-    }
-    
-    // Set value (convert numbers for numeric fields, normalize dates)
-    const numericFields = ['pileDiameter', 'pileDepth', 'designLoad', 'testLoad', 'ramArea'];
-    const dateFields = ['testDate', 'dateOfCasting'];
-    
-    if (numericFields.includes(field)) {
-      (finalValues as Record<string, unknown>)[field] = parseFloat(winner) || 0;
-    } else if (dateFields.includes(field)) {
-      // Normalize dates to ISO format (YYYY-MM-DD)
-      (finalValues as Record<string, unknown>)[field] = normalizeDateToISO(winner) || winner;
-    } else {
-      (finalValues as Record<string, unknown>)[field] = winner;
-    }
-    
-    // Confidence: high if majority (>50%), low otherwise
-    const totalVotes = fieldVotes.length;
-    confidence[field] = maxCount > totalVotes / 2 ? 'high' : 'low';
-    
-    if (confidence[field] === 'low') {
-      console.log(`   ⚠️  Low confidence for ${field}: ${JSON.stringify(fieldVotes)}`);
-    }
-  }
-  
-  return {
-    value: finalValues,
-    confidence: confidence as Record<keyof ExpectedProjectInfo, ConfidenceLevel>,
-    votes: votes as Record<keyof ExpectedProjectInfo, string[]>,
-  };
-}
+## CRITICAL REQUIREMENTS
+1. Extract EVERY reading row from ALL pages (typically 100-150 readings total)
+2. Maintain strict chronological order across pages
+3. Use physics rules to validate and correct obvious OCR errors
+4. Times MUST be in HH:MM format (e.g., "11:29", NOT "1129" or "20130")
+5. Pressure values should be standard steps: 0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 420`;
 
 // =============================================================================
-// PRESSURE INFERENCE FOR HOLDING PHASE
+// UTILITY FUNCTIONS
 // =============================================================================
-
-/**
- * Infers correct pressure for holding phase rows where OCR reads 0.
- * Why: OCR often misreads blank/empty pressure cells as 0 during holding phases.
- *      In pile tests, pressure stays constant during holding (15-min intervals).
- *      Pattern: Load (40) → Hold at 40 → Load (80) → Hold at 80 → ...
- * 
- * Algorithm:
- * - Find rows where pressure changed (loading steps): 0→40, 40→80, etc.
- * - For rows with pressure=0 between loading steps, carry forward previous pressure
- * - Use settlement values to validate (holding phase has gradual increase)
- */
-function inferHoldingPhasePressure(
-  readings: Array<{
-    date?: string;
-    time?: string;
-    pressure: number;
-    dg1: number;
-    dg2: number;
-    dg3: number;
-    dg4: number;
-    calculatedAvg: number;
-    extractedAvg?: number;
-    confidence: ConfidenceLevel;
-    fieldConfidence: FieldConfidence;
-    avgDiff: number;
-  }>
-): typeof readings {
-  if (readings.length === 0) return readings;
-  
-  console.log('   🔧 Inferring pressure for holding phase rows...');
-  
-  // Valid pressure steps in pile tests (kg/cm²)
-  const validPressures = [0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 420];
-  
-  let lastNonZeroPressure = 0;
-  let inferredCount = 0;
-  
-  // First pass: identify the loading pattern and carry forward pressure
-  const result = readings.map((reading, index) => {
-    const pressure = reading.pressure;
-    
-    // If pressure is a valid non-zero loading step, update last known pressure
-    if (pressure > 0 && validPressures.includes(pressure)) {
-      lastNonZeroPressure = pressure;
-      return reading;
-    }
-    
-    // If pressure is 0 but we have a previous non-zero pressure,
-    // this is likely a holding phase row
-    if (pressure === 0 && lastNonZeroPressure > 0 && index > 0) {
-      // Check if this looks like a holding phase (settlement increasing gradually)
-      const prevReading = readings[index - 1];
-      const settlementDiff = reading.calculatedAvg - prevReading.calculatedAvg;
-      
-      // Holding phase: settlement increases slowly (< 0.5mm per reading typically)
-      // Loading phase: settlement jumps significantly
-      const isLikelyHolding = settlementDiff >= 0 && settlementDiff < 0.5;
-      
-      if (isLikelyHolding) {
-        inferredCount++;
-        // Mark pressure field as low confidence since we inferred it
-        return {
-          ...reading,
-          pressure: lastNonZeroPressure,
-          fieldConfidence: {
-            ...reading.fieldConfidence,
-            pressure: 'low' as ConfidenceLevel, // Mark as inferred
-          },
-        };
-      }
-    }
-    
-    // If it's actually 0 (final unloading), keep it
-    return reading;
-  });
-  
-  if (inferredCount > 0) {
-    console.log(`   🔧 Inferred pressure for ${inferredCount} holding phase rows`);
-  }
-  
-  return result;
-}
-
-// =============================================================================
-// AGENT 3: READINGS VERIFIER
-// =============================================================================
-
-/**
- * Parses date string to Date object.
- * Why: Handles various date formats from OCR extraction:
- *   - YYYY-MM-DD (ISO)
- *   - DD-MM-YYYY or DD/MM/YYYY (European)
- *   - D/M/YY or DD/MM/YY (Short year)
- */
-function parseDate(dateStr: string | undefined): Date | null {
-  if (!dateStr) return null;
-  
-  // Try ISO format first (YYYY-MM-DD)
-  const isoMatch = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (isoMatch) {
-    return new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]));
-  }
-  
-  // Try DD-MM-YYYY or DD/MM/YYYY (4-digit year)
-  const dmyMatch = dateStr.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
-  if (dmyMatch) {
-    return new Date(parseInt(dmyMatch[3]), parseInt(dmyMatch[2]) - 1, parseInt(dmyMatch[1]));
-  }
-  
-  // Try D/M/YY or DD/MM/YY (2-digit year) - assume 2000s
-  const shortYearMatch = dateStr.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2})$/);
-  if (shortYearMatch) {
-    const year = 2000 + parseInt(shortYearMatch[3]);
-    return new Date(year, parseInt(shortYearMatch[2]) - 1, parseInt(shortYearMatch[1]));
-  }
-  
-  // Handle OCR error: D/M/Y with single digit year (e.g., "11-12-2" should be "11-12-25")
-  // Why: OCR sometimes misses digits. Single digit year likely has trailing digit missing.
-  // In 2025 context, "2" likely means "25" with "5" missing.
-  const singleDigitYearMatch = dateStr.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d)$/);
-  if (singleDigitYearMatch) {
-    // Assume the digit is the first digit of a 2-digit year in 2020s
-    // e.g., "2" → 2025 (assuming current year context)
-    const yearDigit = parseInt(singleDigitYearMatch[3]);
-    const year = yearDigit === 2 ? 2025 : 2020 + yearDigit; // "2" → 2025, "3" → 2023
-    return new Date(year, parseInt(singleDigitYearMatch[2]) - 1, parseInt(singleDigitYearMatch[1]));
-  }
-  
-  return null;
-}
 
 /**
  * Normalizes date string to ISO format (YYYY-MM-DD).
- * Why: OCR extracts dates in various formats (9/12/25, 10-12-23, etc.)
- *      but expected.json uses ISO format for consistency.
+ * Why: Handles various date formats from OCR extraction.
  */
 function normalizeDateToISO(dateStr: string | undefined): string | undefined {
   if (!dateStr) return undefined;
@@ -431,125 +283,345 @@ function normalizeDateToISO(dateStr: string | undefined): string | undefined {
     return dateStr;
   }
   
-  const parsed = parseDate(dateStr);
-  if (!parsed) return dateStr; // Return original if can't parse
-  
-  // Format as YYYY-MM-DD
-  const year = parsed.getFullYear();
-  const month = String(parsed.getMonth() + 1).padStart(2, '0');
-  const day = String(parsed.getDate()).padStart(2, '0');
-  
-  return `${year}-${month}-${day}`;
-}
-
-/**
- * Parses time string to minutes since midnight.
- * Why: Handles various time formats from OCR extraction:
- *   - HH:MM (standard with colon)
- *   - HH.MM (with period - common in handwritten notes)
- *   - H.MM or H:MM (single digit hour)
- */
-function parseTimeToMinutes(timeStr: string | undefined): number {
-  if (!timeStr) return 0;
-  
-  // Match HH:MM or HH.MM or H:MM or H.MM
-  const match = timeStr.match(/^(\d{1,2})[:.](\d{2})$/);
-  if (!match) return 0;
-  
-  let hours = parseInt(match[1]);
-  const minutes = parseInt(match[2]);
-  
-  // Handle 24:XX as 00:XX next day (add 24 hours worth of minutes)
-  // This handles times like "24.30" which means 00:30 next day
-  if (hours >= 24) {
-    return (hours * 60) + minutes; // Keep the >24 value for sorting across midnight
+  // Try DD-MM-YYYY or DD/MM/YYYY (4-digit year)
+  const dmyMatch = dateStr.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (dmyMatch) {
+    const day = dmyMatch[1].padStart(2, '0');
+    const month = dmyMatch[2].padStart(2, '0');
+    return `${dmyMatch[3]}-${month}-${day}`;
   }
   
-  return hours * 60 + minutes;
+  // Try D/M/YY or DD/MM/YY (2-digit year) - assume 2000s
+  const shortYearMatch = dateStr.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2})$/);
+  if (shortYearMatch) {
+    const day = shortYearMatch[1].padStart(2, '0');
+    const month = shortYearMatch[2].padStart(2, '0');
+    const year = 2000 + parseInt(shortYearMatch[3]);
+    return `${year}-${month}-${day}`;
+  }
+  
+  return dateStr; // Return original if can't parse
 }
 
 /**
- * Sorts readings by time, pressure, and phase using domain knowledge.
- * Why: OCR may extract rows out of order; this ensures correct sequence.
- * 
- * Sort order:
- * 1. Date (chronological)
- * 2. Time (chronological)
- * 3. Within same time: pressure loading pattern (0→40→80... then hold, then 80→40→0)
+ * Repairs truncated JSON by closing unclosed brackets/braces.
+ * Why: LLMs sometimes return truncated responses that are 99% valid JSON.
  */
-function sortReadingsByTimeAndPhase(
-  readings: Array<{
-    date?: string;
-    time?: string;
-    pressure: number;
-    dg1: number;
-    dg2: number;
-    dg3: number;
-    dg4: number;
-    calculatedAvg: number;
-    extractedAvg?: number;
-    confidence: ConfidenceLevel;
-    fieldConfidence: FieldConfidence;
-    avgDiff: number;
-  }>
-): typeof readings {
-  if (readings.length === 0) return readings;
+function repairTruncatedJson(text: string): string | null {
+  // Strip any markdown code fences
+  let cleaned = text.trim();
+  if (cleaned.startsWith('```json')) cleaned = cleaned.slice(7);
+  else if (cleaned.startsWith('```')) cleaned = cleaned.slice(3);
+  if (cleaned.endsWith('```')) cleaned = cleaned.slice(0, -3);
+  cleaned = cleaned.trim();
   
-  console.log('   🔄 Sorting readings by time and phase...');
+  // Find the first '{' to handle any preamble text
+  const firstBrace = cleaned.indexOf('{');
+  if (firstBrace === -1) return null;
+  cleaned = cleaned.slice(firstBrace);
   
-  // Find max pressure (indicates peak of test)
-  const maxPressure = Math.max(...readings.map(r => r.pressure));
+  // Count unclosed brackets and braces
+  let openBraces = 0;
+  let openBrackets = 0;
+  let inString = false;
+  let escapeNext = false;
   
-  // First, sort by date+time to establish rough order
-  const sorted = [...readings].sort((a, b) => {
-    const dateA = parseDate(a.date);
-    const dateB = parseDate(b.date);
-    
-    // Compare dates
-    if (dateA && dateB) {
-      const dateDiff = dateA.getTime() - dateB.getTime();
-      if (dateDiff !== 0) return dateDiff;
+  for (const char of cleaned) {
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
     }
-    
-    // Compare times
-    const timeA = parseTimeToMinutes(a.time);
-    const timeB = parseTimeToMinutes(b.time);
-    if (timeA !== timeB) return timeA - timeB;
-    
-    // Same date+time: use pressure pattern
-    // During loading (before max reached), higher pressure = later
-    // During unloading (after max), lower pressure = later
-    return 0; // Keep original order if same time
-  });
+    if (char === '\\') {
+      escapeNext = true;
+      continue;
+    }
+    if (char === '"' && !escapeNext) {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (char === '{') openBraces++;
+    else if (char === '}') openBraces--;
+    else if (char === '[') openBrackets++;
+    else if (char === ']') openBrackets--;
+  }
   
-  console.log(`   🔄 Max pressure: ${maxPressure} kg/cm², readings sorted by date+time`);
+  // If already balanced, return as-is
+  if (openBraces === 0 && openBrackets === 0) {
+    return cleaned;
+  }
   
-  return sorted;
+  console.log(`   🔧 Attempting JSON repair: ${openBraces} unclosed braces, ${openBrackets} unclosed brackets`);
+  
+  // Try to close unclosed structures
+  let repaired = cleaned.trimEnd();
+  
+  // If ends with an incomplete string, try to close it
+  if (inString) {
+    // Find the last complete value and truncate there
+    const lastCompleteComma = repaired.lastIndexOf('},');
+    if (lastCompleteComma > repaired.length - 200) { // If within last 200 chars
+      repaired = repaired.substring(0, lastCompleteComma + 1);
+      // Recount after truncation
+      openBraces = 0;
+      openBrackets = 0;
+      inString = false;
+      for (const char of repaired) {
+        if (escapeNext) { escapeNext = false; continue; }
+        if (char === '\\') { escapeNext = true; continue; }
+        if (char === '"') { inString = !inString; continue; }
+        if (inString) continue;
+        if (char === '{') openBraces++;
+        else if (char === '}') openBraces--;
+        else if (char === '[') openBrackets++;
+        else if (char === ']') openBrackets--;
+      }
+    }
+  }
+  
+  // Remove trailing incomplete key-value
+  if (repaired.trimEnd().endsWith(':')) {
+    repaired += 'null';
+  } else if (repaired.trimEnd().endsWith(',')) {
+    repaired = repaired.trimEnd().slice(0, -1); // Remove trailing comma
+  }
+  
+  // Add closing brackets and braces
+  repaired += ']'.repeat(Math.max(0, openBrackets));
+  repaired += '}'.repeat(Math.max(0, openBraces));
+  
+  return repaired;
 }
 
 /**
- * Readings Verifier Agent - validates each reading using avgSettlement.
- * Why: If calculated avg differs from extracted avg by >0.05mm, mark as low confidence.
+ * Validates and normalizes time format.
+ * Why: Ensures time is in HH:MM format, corrects common OCR errors.
  */
-function runReadingsVerifier(
-  rawReadings: Array<Record<string, string>>
+function normalizeTime(timeStr: string | undefined): string | undefined {
+  if (!timeStr) return undefined;
+  
+  // Already in HH:MM format
+  if (/^\d{1,2}:\d{2}$/.test(timeStr)) {
+    const [h, m] = timeStr.split(':');
+    return `${h.padStart(2, '0')}:${m}`;
+  }
+  
+  // Handle HH.MM format (period instead of colon)
+  if (/^\d{1,2}\.\d{2}$/.test(timeStr)) {
+    const [h, m] = timeStr.split('.');
+    return `${h.padStart(2, '0')}:${m}`;
+  }
+  
+  // Handle HHMM format (no separator) - only if 4 digits
+  if (/^\d{4}$/.test(timeStr)) {
+    const h = timeStr.substring(0, 2);
+    const m = timeStr.substring(2, 4);
+    const hour = parseInt(h);
+    const min = parseInt(m);
+    if (hour >= 0 && hour <= 23 && min >= 0 && min <= 59) {
+      return `${h}:${m}`;
+    }
+  }
+  
+  return undefined; // Invalid format
+}
+
+// =============================================================================
+// AGENT 1: PROJECT INFO AGENT
+// =============================================================================
+
+/**
+ * Detects MIME type from base64 image data.
+ * Why: Gemini supports multiple formats (PNG, JPEG, WEBP, HEIC, HEIF) - detect instead of assuming.
+ */
+function detectImageMimeType(base64Data: string): string {
+  // Check magic bytes to detect format
+  const buffer = Buffer.from(base64Data, 'base64');
+  const header = buffer.subarray(0, 12);
+  
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4E && header[3] === 0x47) {
+    return 'image/png';
+  }
+  // JPEG: FF D8 FF
+  if (header[0] === 0xFF && header[1] === 0xD8 && header[2] === 0xFF) {
+    return 'image/jpeg';
+  }
+  // WEBP: RIFF...WEBP
+  if (header[0] === 0x52 && header[1] === 0x49 && header[2] === 0x46 && header[3] === 0x46) {
+    const webpCheck = buffer.subarray(8, 12);
+    if (webpCheck.toString() === 'WEBP') {
+      return 'image/webp';
+    }
+  }
+  
+  // Default to PNG (most common from pdf-to-img)
+  return 'image/png';
+}
+
+/**
+ * Project Info Agent - extracts header metadata from all pages.
+ * Why: Gets all pages together to cross-verify project info.
+ */
+async function runProjectInfoAgent(
+  model: ReturnType<GoogleGenerativeAI['getGenerativeModel']>,
+  pageImages: string[]
+): Promise<Partial<ExpectedProjectInfo>> {
+  console.log('   📋 Project Info Agent: Processing all pages...');
+  
+  // Check file limit (Gemini 2.5 Pro supports max 3,600 images)
+  if (pageImages.length > 3600) {
+    throw new Error(`Too many pages: ${pageImages.length}. Maximum is 3,600 images per request.`);
+  }
+  
+  const imageParts = pageImages.map((img) => ({
+    inlineData: {
+      data: img,
+      mimeType: detectImageMimeType(img),
+    },
+  }));
+
+  const result = await model.generateContent([
+    ...imageParts,
+    PROJECT_INFO_PROMPT,
+  ]);
+
+  const response = await result.response;
+  const content = response.text();
+  
+  if (!content) {
+    console.log('   ❌ Project Info Agent: No response');
+    return {};
+  }
+
+  // Extract JSON from response
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  const jsonContent = jsonMatch ? jsonMatch[0] : content;
+  
+  try {
+    const parsed = JSON.parse(jsonContent);
+    console.log(`   ✅ Project Info Agent: Extracted ${Object.keys(parsed).length} fields`);
+    return parsed;
+  } catch (e) {
+    console.log('   ❌ Project Info Agent: JSON parse error');
+    return {};
+  }
+}
+
+// =============================================================================
+// AGENT 2: READINGS AGENT
+// =============================================================================
+
+/**
+ * Raw reading from the Readings Agent.
+ */
+interface RawReading {
+  date?: string;
+  time?: string;
+  pressure: number;
+  dg1: number;
+  dg2: number;
+  dg3: number;
+  dg4: number;
+  avg?: number;
+  phase?: 'loading' | 'holding' | 'unloading';
+  remark?: string;
+}
+
+/**
+ * Readings Agent - extracts all readings from all pages sequentially.
+ * Why: Gets all pages together to maintain sequence and context.
+ */
+async function runReadingsAgent(
+  model: ReturnType<GoogleGenerativeAI['getGenerativeModel']>,
+  pageImages: string[]
+): Promise<RawReading[]> {
+  console.log('   📊 Readings Agent: Processing all pages...');
+  
+  // Check file limit (Gemini 2.5 Pro supports max 3,600 images)
+  if (pageImages.length > 3600) {
+    throw new Error(`Too many pages: ${pageImages.length}. Maximum is 3,600 images per request.`);
+  }
+  
+  const imageParts = pageImages.map((img) => ({
+    inlineData: {
+      data: img,
+      mimeType: detectImageMimeType(img),
+    },
+  }));
+
+  const result = await model.generateContent([
+    ...imageParts,
+    READINGS_PROMPT,
+  ]);
+
+  const response = await result.response;
+  const content = response.text();
+  
+  if (!content) {
+    console.log('   ❌ Readings Agent: No response');
+    return [];
+  }
+
+  // Extract JSON from response
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  const jsonContent = jsonMatch ? jsonMatch[0] : content;
+  
+  try {
+    const parsed = JSON.parse(jsonContent);
+    const readings = parsed.readings || [];
+    console.log(`   ✅ Readings Agent: Extracted ${readings.length} readings`);
+    return readings;
+  } catch (e) {
+    console.log('   ⚠️  Readings Agent: JSON parse error, attempting repair...');
+    console.log(`   Content length: ${content.length} chars`);
+    
+    // Try to repair truncated JSON
+    const repaired = repairTruncatedJson(content);
+    if (repaired) {
+      try {
+        const parsed = JSON.parse(repaired);
+        const readings = parsed.readings || [];
+        console.log(`   ✅ Readings Agent: Extracted ${readings.length} readings (after repair)`);
+        return readings;
+      } catch (e2) {
+        console.log('   ❌ JSON repair failed');
+        console.log('   First 500 chars:', content.substring(0, 500));
+        console.log('   Last 500 chars:', content.substring(content.length - 500));
+        console.log('   Error:', e2 instanceof Error ? e2.message : e2);
+      }
+    }
+    return [];
+  }
+}
+
+// =============================================================================
+// READINGS VERIFIER
+// =============================================================================
+
+/**
+ * Verifies and enriches readings with confidence scores.
+ * Why: Validates avgSettlement and adds confidence metadata.
+ */
+function verifyReadings(
+  rawReadings: RawReading[]
 ): ExtractedReadingWithConfidence[] {
-  console.log('   ✅ Readings Verifier: Validating avgSettlement...');
+  console.log('   ✅ Verifying readings...');
   
   const AVG_TOLERANCE = 0.05; // ±0.05mm tolerance
   let lowConfidenceCount = 0;
-  
-  // First pass: parse and validate all readings
-  const parsed = rawReadings.map((r) => {
-    const dg1 = parseFloat(r.dg1) || 0;
-    const dg2 = parseFloat(r.dg2) || 0;
-    const dg3 = parseFloat(r.dg3) || 0;
-    const dg4 = parseFloat(r.dg4) || 0;
-    const pressure = parseFloat(r.pressure) || 0;
-    const extractedAvg = r.avg ? parseFloat(r.avg) : undefined;
+
+  const verified: ExtractedReadingWithConfidence[] = rawReadings.map((r, index) => {
+    const dg1 = r.dg1 ?? 0;
+    const dg2 = r.dg2 ?? 0;
+    const dg3 = r.dg3 ?? 0;
+    const dg4 = r.dg4 ?? 0;
+    const pressure = r.pressure ?? 0;
+    const extractedAvg = r.avg;
     
-    // Normalize date to ISO format (YYYY-MM-DD)
+    // Normalize date and time
     const normalizedDate = normalizeDateToISO(r.date);
+    const normalizedTime = normalizeTime(r.time);
     
     // Calculate avg from dial gauges
     const calculatedAvg = Math.round(((dg1 + dg2 + dg3 + dg4) / 4) * 100) / 100;
@@ -562,7 +634,10 @@ function runReadingsVerifier(
     // Determine confidence based on avgSettlement validation
     const avgMatches = extractedAvg === undefined || avgDiff <= AVG_TOLERANCE;
     
-    // Check which gauge might be wrong (furthest from average of others)
+    // Check for invalid time format
+    const hasValidTime = normalizedTime !== undefined;
+    
+    // Field-level confidence
     const fieldConfidence: FieldConfidence = {
       dg1: 'high',
       dg2: 'high',
@@ -571,8 +646,8 @@ function runReadingsVerifier(
       pressure: 'high',
     };
     
+    // Check which gauge might be wrong (furthest from average of others)
     if (!avgMatches && extractedAvg !== undefined) {
-      // Find which gauge is likely wrong
       const gauges = [
         { key: 'dg1', value: dg1 },
         { key: 'dg2', value: dg2 },
@@ -580,26 +655,25 @@ function runReadingsVerifier(
         { key: 'dg4', value: dg4 },
       ];
       
-      // For each gauge, calculate what avg would be without it
       for (const gauge of gauges) {
         const others = gauges.filter(g => g.key !== gauge.key);
         const avgWithoutThis = others.reduce((sum, g) => sum + g.value, 0) / 3;
         
-        // If this gauge is far from the others' average, it's likely wrong
         if (Math.abs(gauge.value - avgWithoutThis) > AVG_TOLERANCE * 2) {
           fieldConfidence[gauge.key as keyof FieldConfidence] = 'low';
         }
       }
     }
     
-    const overallConfidence: ConfidenceLevel = avgMatches ? 'high' : 'low';
-    if (!avgMatches) {
+    const overallConfidence: ConfidenceLevel = (avgMatches && hasValidTime) ? 'high' : 'low';
+    if (overallConfidence === 'low') {
       lowConfidenceCount++;
     }
     
     return {
+      sequence: index + 1,
       date: normalizedDate,
-      time: r.time || undefined,
+      time: normalizedTime,
       pressure,
       dg1,
       dg2,
@@ -610,22 +684,11 @@ function runReadingsVerifier(
       confidence: overallConfidence,
       fieldConfidence,
       avgDiff,
+      phase: r.phase,
     };
   });
-  
-  // Sort by time and phase to establish correct sequence
-  const sorted = sortReadingsByTimeAndPhase(parsed);
-  
-  // Infer pressure for holding phase rows (OCR often reads 0)
-  const withPressureInferred = inferHoldingPhasePressure(sorted);
-  
-  // Assign sequence numbers AFTER sorting and pressure inference
-  const verified: ExtractedReadingWithConfidence[] = withPressureInferred.map((r, index) => ({
-    ...r,
-    sequence: index + 1,
-  }));
-  
-  console.log(`   ✅ Readings Verifier: ${lowConfidenceCount} low confidence rows`);
+
+  console.log(`   ✅ Verification complete: ${lowConfidenceCount} low confidence rows`);
   return verified;
 }
 
@@ -635,65 +698,79 @@ function runReadingsVerifier(
 
 /**
  * Main agent swarm extraction function.
- * Why: Orchestrates all agents for maximum accuracy and speed.
+ * Why: Orchestrates both agents in parallel for speed and accuracy.
  */
 export async function runAgentSwarm(
   pageImages: string[],
   apiKey: string
 ): Promise<AgentSwarmResult> {
   const genAI = new GoogleGenerativeAI(apiKey);
+  // Using gemini-2.5-pro for best accuracy and higher output limits
   const model = genAI.getGenerativeModel({ 
-    model: 'gemini-2.0-flash',
+    model: 'gemini-2.5-pro',
     generationConfig: {
       responseMimeType: 'application/json',
+      temperature: 0.1, // Low temperature for consistent extraction
+      maxOutputTokens: 65536, // High output limit for 109 readings
     },
   });
   
-  console.log('\n🤖 AGENT SWARM EXTRACTION (Gemini 2.0 Flash)');
+  console.log('\n🤖 AGENT SWARM EXTRACTION (Gemini 2.5 Pro)');
   console.log('='.repeat(50));
+  console.log(`   📄 Processing ${pageImages.length} pages...`);
   
-  // STEP 1: Page Agents (parallel extraction)
-  console.log(`   📄 Running ${pageImages.length} Page Agents in parallel...`);
-  const pagePromises = pageImages.map((img, i) =>
-    runPageAgent(model, img, i + 1, pageImages.length)
-  );
-  const pageResults = await Promise.all(pagePromises);
-  
-  // Sort by page number
-  pageResults.sort((a, b) => a.pageNum - b.pageNum);
-  
-  // Log results
-  for (const result of pageResults) {
-    console.log(`   📄 Page ${result.pageNum}: ${result.readings.length} readings`);
+  // Check file limit upfront (Gemini 2.5 Pro supports max 3,600 images per request)
+  if (pageImages.length > 3600) {
+    throw new Error(`Too many pages: ${pageImages.length}. Maximum is 3,600 images per request.`);
   }
   
-  // Combine all readings
-  const allRawReadings = pageResults.flatMap(r => r.readings);
-  console.log(`   📊 Total raw readings: ${allRawReadings.length}`);
+  // Run both agents in parallel
+  const [projectInfoResult, readingsResult] = await Promise.all([
+    runProjectInfoAgent(model, pageImages),
+    runReadingsAgent(model, pageImages),
+  ]);
   
-  // STEP 2: Project Info Verifier (majority vote)
-  const projectInfo = runProjectInfoVerifier(pageResults);
+  // Verify and enrich readings
+  const verifiedReadings = verifyReadings(readingsResult);
   
-  // STEP 3: Readings Verifier (avgSettlement validation + pressure inference)
-  const finalReadings = runReadingsVerifier(allRawReadings);
+  // Build project info with confidence
+  const projectInfo: ProjectInfoWithConfidence = {
+    value: projectInfoResult,
+    confidence: {} as Record<keyof ExpectedProjectInfo, ConfidenceLevel>,
+    votes: {} as Record<keyof ExpectedProjectInfo, string[]>,
+  };
+  
+  // Set confidence for each field (all high since we're using single agent now)
+  const fields: (keyof ExpectedProjectInfo)[] = [
+    'pileId', 'reportNo', 'project', 'location', 'client', 'contractor',
+    'pileDiameter', 'pileDepth', 'designLoad', 'testLoad', 'ramArea',
+    'concreteGrade', 'testDate', 'dateOfCasting'
+  ];
+  
+  for (const field of fields) {
+    const value = projectInfoResult[field];
+    projectInfo.confidence[field] = value !== undefined && value !== null ? 'high' : 'low';
+    projectInfo.votes[field] = value !== undefined && value !== null ? [String(value)] : [];
+  }
   
   // Calculate stats
-  const lowConfidenceCount = finalReadings.filter(r => r.confidence === 'low').length;
+  const lowConfidenceCount = verifiedReadings.filter(r => r.confidence === 'low').length;
   
   console.log('='.repeat(50));
   console.log(`✅ Extraction complete:`);
-  console.log(`   Extracted rows: ${allRawReadings.length}`);
+  console.log(`   Project info fields: ${Object.keys(projectInfoResult).length}`);
+  console.log(`   Readings extracted: ${verifiedReadings.length}`);
   console.log(`   Low confidence: ${lowConfidenceCount}`);
   
   return {
-    expectedRowCount: allRawReadings.length, // Same as extracted for backward compatibility
-    extractedRowCount: allRawReadings.length,
-    missingRowCount: 0, // No row estimation
+    expectedRowCount: verifiedReadings.length,
+    extractedRowCount: verifiedReadings.length,
+    missingRowCount: 0,
     projectInfo,
-    readings: finalReadings,
+    readings: verifiedReadings,
     lowConfidenceCount,
-    emptyRowCount: 0, // No blank rows inserted
+    emptyRowCount: 0,
     extractedAt: new Date().toISOString(),
-    model: 'gemini-2.0-flash (agent swarm)',
+    model: 'gemini-2.5-pro (two-agent swarm)',
   };
 }

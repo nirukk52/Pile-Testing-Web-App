@@ -90,6 +90,7 @@ interface TestActions {
   loadTestsFromApi: () => Promise<void>;
   saveTestToApi: () => Promise<void>;
   addReadingToApi: (reading: LegacyReading) => Promise<api.ApiReading>;
+  addReadingsBatchToApi: (readings: LegacyReading[]) => Promise<api.ApiReading[]>;
   updateReadingToApi: (readingId: string, reading: LegacyReading, loadOverride?: number, avgOverride?: number) => Promise<api.ApiReading>;
   deleteReadingFromApi: (readingId: string) => Promise<void>;
 
@@ -194,6 +195,8 @@ function apiTestToSavedTest(test: api.ApiTest): SavedTest {
     loadEntries,
     createdAt: test.createdAt,
     updatedAt: test.updatedAt,
+    // Use _count.readings from API for list display (avoids loading all readings)
+    readingsCount: test._count?.readings ?? loadEntries.length,
   };
 }
 
@@ -517,6 +520,70 @@ export const useTestStore = create<TestState & TestActions>()((set, get) => ({
     return apiReading;
   },
 
+  /**
+   * Batch add multiple readings to API in a single transaction.
+   * Why: Bulk inserts are orders of magnitude faster than sequential single inserts.
+   * For 100 readings: ~100ms (batch) vs ~10-30 seconds (sequential)
+   */
+  addReadingsBatchToApi: async (readings: LegacyReading[]) => {
+    const { supabaseTestId } = get();
+    
+    if (!supabaseTestId) {
+      // Save test first
+      await get().saveTestToApi();
+    }
+
+    const testId = get().supabaseTestId;
+    if (!testId) {
+      throw new Error('No test ID available. Please save project details first.');
+    }
+
+    const phaseMap: Record<LegacyTestPhase, string> = {
+      loading: 'LOADING',
+      holding: 'HOLD',
+      unloading: 'UNLOADING',
+    };
+
+    // Transform legacy readings to API format
+    const apiReadings = readings.map((reading) => ({
+      phase: phaseMap[reading.phase] as api.ApiReading['phase'],
+      recordedAt: reading.timestamp,
+      pressureKgCm2: parseFloat(reading.pressureGauge),
+      dg1: parseFloat(reading.dialGauge1) || 0,
+      dg2: parseFloat(reading.dialGauge2) || 0,
+      dg3: parseFloat(reading.dialGauge3) || 0,
+      dg4: parseFloat(reading.dialGauge4) || 0,
+      dg1Enabled: reading.dg1Enabled ?? true,
+      dg2Enabled: reading.dg2Enabled ?? true,
+      dg3Enabled: reading.dg3Enabled ?? true,
+      dg4Enabled: reading.dg4Enabled ?? true,
+      remark: reading.remark || undefined,
+    }));
+
+    const result = await api.createReadingsBatch(testId, apiReadings);
+
+    // Update local state with new API IDs
+    set((state) => {
+      const updatedEntries = [...state.loadEntries];
+      
+      // Map API reading IDs back to local entries by sequence
+      result.readings.forEach((apiReading, index) => {
+        if (index < updatedEntries.length && updatedEntries[index].readings.length > 0) {
+          updatedEntries[index] = {
+            ...updatedEntries[index],
+            readings: updatedEntries[index].readings.map((r, rIdx) => 
+              rIdx === 0 ? { ...r, id: apiReading.id } : r
+            ),
+          };
+        }
+      });
+
+      return { loadEntries: updatedEntries };
+    });
+
+    return result.readings;
+  },
+
   updateReadingToApi: async (readingId: string, reading: LegacyReading, loadOverride?: number, avgOverride?: number) => {
     const { supabaseTestId } = get();
     
@@ -560,7 +627,8 @@ export const useTestStore = create<TestState & TestActions>()((set, get) => ({
   // Helpers
   getTestSummaries: (): PileTestSummary[] => {
     return get().allTests.map((test) => {
-      const totalReadings = test.loadEntries.reduce(
+      // Use cached readingsCount from API, fallback to counting loadEntries
+      const totalReadings = test.readingsCount ?? test.loadEntries.reduce(
         (sum, entry) => sum + entry.readings.length,
         0
       );
@@ -615,6 +683,7 @@ export const useApiSync = () => {
   const loadTestsFromApi = useTestStore((s) => s.loadTestsFromApi);
   const saveTestToApi = useTestStore((s) => s.saveTestToApi);
   const addReadingToApi = useTestStore((s) => s.addReadingToApi);
+  const addReadingsBatchToApi = useTestStore((s) => s.addReadingsBatchToApi);
   const updateReadingToApi = useTestStore((s) => s.updateReadingToApi);
   const deleteReadingFromApi = useTestStore((s) => s.deleteReadingFromApi);
   const updateLoadEntry = useTestStore((s) => s.updateLoadEntry);
@@ -625,7 +694,8 @@ export const useApiSync = () => {
   return { 
     loadTestsFromApi, 
     saveTestToApi, 
-    addReadingToApi, 
+    addReadingToApi,
+    addReadingsBatchToApi,
     updateReadingToApi,
     deleteReadingFromApi,
     updateLoadEntry,

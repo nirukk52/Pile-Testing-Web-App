@@ -35,6 +35,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         siteImages: {
           orderBy: { displayOrder: 'asc' },
         },
+        fieldReadings: {
+          orderBy: { createdAt: 'asc' },
+        },
+        certificates: {
+          orderBy: { createdAt: 'asc' },
+        },
       },
     });
 
@@ -55,12 +61,27 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Get the appropriate engine
     const engine = getTestEngine(test.testType as TestType);
 
-    // Convert readings to engine input format
+    // Convert readings to engine input format (basic for calculations)
     const readingInputs: ReadingInput[] = test.readings.map((r) => ({
       sequence: r.sequence,
       phase: r.phase as 'LOADING' | 'HOLD' | 'UNLOADING',
       loadT: r.loadT,
       avgSettlementMm: r.avgSettlementMm,
+    }));
+
+    // Extended readings with all fields for observation sheet
+    const extendedReadings = test.readings.map((r) => ({
+      sequence: r.sequence,
+      phase: r.phase as 'LOADING' | 'HOLD' | 'UNLOADING',
+      loadT: r.loadT,
+      avgSettlementMm: r.avgSettlementMm,
+      dialGauge1: r.dg1.toString(),
+      dialGauge2: r.dg2.toString(),
+      dialGauge3: r.dg3.toString(),
+      dialGauge4: r.dg4.toString(),
+      timestamp: r.recordedAt?.toISOString(),
+      pressureGauge: r.pressureKgCm2.toString(),
+      remark: r.remark || undefined,
     }));
 
     // Build test metadata
@@ -114,7 +135,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       ramAreaCm2: test.ramAreaCm2,
       gaugeLeastCountMm: test.gaugeLeastCountMm,
       result,
-      readings: readingInputs,
+      readings: extendedReadings,
       conclusion: test.conclusion || undefined,
       siteImages,
       fieldReadings: fieldReadingsForReport,
@@ -213,12 +234,27 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Get the appropriate engine
     const engine = getTestEngine(test.testType as TestType);
 
-    // Convert readings to engine input format
+    // Convert readings to engine input format (basic for calculations)
     const readingInputs: ReadingInput[] = test.readings.map((r) => ({
       sequence: r.sequence,
       phase: r.phase as 'LOADING' | 'HOLD' | 'UNLOADING',
       loadT: r.loadT,
       avgSettlementMm: r.avgSettlementMm,
+    }));
+
+    // Extended readings with all fields for observation sheet
+    const extendedReadings = test.readings.map((r) => ({
+      sequence: r.sequence,
+      phase: r.phase as 'LOADING' | 'HOLD' | 'UNLOADING',
+      loadT: r.loadT,
+      avgSettlementMm: r.avgSettlementMm,
+      dialGauge1: r.dg1.toString(),
+      dialGauge2: r.dg2.toString(),
+      dialGauge3: r.dg3.toString(),
+      dialGauge4: r.dg4.toString(),
+      timestamp: r.recordedAt?.toISOString(),
+      pressureGauge: r.pressureKgCm2.toString(),
+      remark: r.remark || undefined,
     }));
 
     // Build test metadata
@@ -272,7 +308,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       ramAreaCm2: test.ramAreaCm2,
       gaugeLeastCountMm: test.gaugeLeastCountMm,
       result,
-      readings: readingInputs,
+      readings: extendedReadings,
       conclusion: test.conclusion || undefined,
       chartImageBase64: chartImageBase64 || undefined,
       siteImages,

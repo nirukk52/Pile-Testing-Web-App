@@ -247,6 +247,40 @@ export async function createReading(
 }
 
 /**
+ * Batch create multiple readings in a single transaction
+ * Why: Bulk inserts are orders of magnitude faster than sequential single inserts.
+ * For 100 readings: ~100ms (batch) vs ~10-30 seconds (sequential)
+ */
+export async function createReadingsBatch(
+  testId: string,
+  readings: Array<{
+    phase: TestPhase;
+    recordedAt?: string;
+    pressureKgCm2: number;
+    dg1: number;
+    dg2: number;
+    dg3: number;
+    dg4: number;
+    dg1Enabled?: boolean;
+    dg2Enabled?: boolean;
+    dg3Enabled?: boolean;
+    dg4Enabled?: boolean;
+    remark?: string;
+  }>
+): Promise<{ count: number; readings: ApiReading[] }> {
+  const response = await fetch(`/api/tests/${testId}/readings/batch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ readings }),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to batch create readings');
+  }
+  return response.json();
+}
+
+/**
  * Update an existing reading
  * Why: Allows site engineers to edit readings, including manual load/avg overrides.
  */

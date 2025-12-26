@@ -216,6 +216,136 @@ function generateLoadSequenceTableHtml(
 }
 
 /**
+ * Extended reading input with dial gauge values for observation sheet.
+ * Why: The observation sheet needs individual dial gauge readings, not just the average.
+ */
+interface ExtendedReadingInput extends ReadingInput {
+  dialGauge1?: string;
+  dialGauge2?: string;
+  dialGauge3?: string;
+  dialGauge4?: string;
+  timestamp?: string;
+  pressureGauge?: string;
+  remark?: string;
+}
+
+/**
+ * Generate HTML for the observation sheet table matching data entry style.
+ * Why: Creates a field-sheet style table with phase headers and all dial gauge readings.
+ */
+function generateObservationSheetHtml(readings: ReadingInput[]): string {
+  // Cast to extended type if additional fields are available
+  const extendedReadings = readings as ExtendedReadingInput[];
+  
+  // Phase colors matching data entry
+  const phaseColors: Record<string, { bg: string; text: string }> = {
+    LOADING: { bg: '#2563eb', text: '#ffffff' },
+    HOLD: { bg: '#d97706', text: '#ffffff' },
+    UNLOADING: { bg: '#16a34a', text: '#ffffff' },
+  };
+  
+  let html = `
+    <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
+      <thead>
+        <tr style="background: #f1f5f9; border-bottom: 2px solid #cbd5e1;">
+          <th style="border: 1px solid #cbd5e1; padding: 8px 6px; min-width: 70px;">DATE</th>
+          <th style="border: 1px solid #cbd5e1; padding: 8px 6px; min-width: 60px;">TIME<br/>(Hrs)</th>
+          <th style="border: 1px solid #cbd5e1; padding: 8px 6px; min-width: 70px;">PRESSURE<br/>GAUGE<br/>READING<br/>kg/cm²</th>
+          <th style="border: 1px solid #cbd5e1; padding: 8px 6px; min-width: 60px;">LOAD<br/>IN MT</th>
+          <th style="border: 1px solid #cbd5e1; padding: 8px 6px;" colspan="4">Dial Gauge</th>
+          <th style="border: 1px solid #cbd5e1; padding: 8px 6px; min-width: 70px;">AVERAGE<br/>SETTLEMENT<br/>IN MM</th>
+          <th style="border: 1px solid #cbd5e1; padding: 8px 6px; min-width: 80px;">REMARK</th>
+        </tr>
+        <tr style="background: #f8fafc; border-bottom: 1px solid #cbd5e1;">
+          <th colspan="4" style="border: 1px solid #cbd5e1;"></th>
+          <th style="border: 1px solid #cbd5e1; padding: 4px 6px;">Reading<br/>1</th>
+          <th style="border: 1px solid #cbd5e1; padding: 4px 6px;">Reading<br/>2</th>
+          <th style="border: 1px solid #cbd5e1; padding: 4px 6px;">Reading<br/>3</th>
+          <th style="border: 1px solid #cbd5e1; padding: 4px 6px;">Reading<br/>4</th>
+          <th style="border: 1px solid #cbd5e1;"></th>
+          <th style="border: 1px solid #cbd5e1;"></th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+  
+  let prevPhase: string | null = null;
+  let prevLoad: number | null = null;
+  let prevDate: string | null = null;
+  
+  extendedReadings.forEach((reading, index) => {
+    const phase = reading.phase;
+    const phaseStyle = phaseColors[phase] || phaseColors.LOADING;
+    
+    // Format date and time from timestamp if available
+    let dateStr = '-';
+    let timeStr = '-';
+    if (reading.timestamp) {
+      try {
+        const date = new Date(reading.timestamp);
+        dateStr = date.toLocaleDateString('en-GB', { 
+          day: '2-digit', 
+          month: '2-digit', 
+          year: 'numeric',
+          timeZone: 'Asia/Kolkata'
+        }).replace(/\//g, '/');
+        timeStr = date.toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit', 
+          hour12: false,
+          timeZone: 'Asia/Kolkata'
+        });
+      } catch {
+        // Keep defaults
+      }
+    }
+    
+    // Show phase header when phase changes
+    if (phase !== prevPhase) {
+      const phaseName = phase === 'HOLD' ? 'Holding' : phase.charAt(0) + phase.slice(1).toLowerCase();
+      html += `
+        <tr>
+          <td colspan="10" style="background: ${phaseStyle.bg}; color: ${phaseStyle.text}; text-align: center; padding: 6px; font-weight: 600; border: 1px solid #cbd5e1;">
+            ${phaseName}
+          </td>
+        </tr>
+      `;
+      prevPhase = phase;
+    }
+    
+    // Only show date if it changed
+    const showDate = dateStr !== prevDate || index === 0;
+    prevDate = dateStr;
+    
+    // Only show load if it changed
+    const loadChanged = prevLoad === null || reading.loadT !== prevLoad;
+    prevLoad = reading.loadT;
+    
+    html += `
+      <tr style="border-bottom: 1px solid #e2e8f0;">
+        <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center; font-weight: ${showDate ? '600' : '400'};">${showDate ? dateStr : ''}</td>
+        <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center;">${timeStr}</td>
+        <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center; font-weight: 600;">${reading.pressureGauge || '-'}</td>
+        <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center; color: #2563eb; font-weight: 600;">${loadChanged ? reading.loadT.toFixed(2) : ''}</td>
+        <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center;">${reading.dialGauge1 || '-'}</td>
+        <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center;">${reading.dialGauge2 || '-'}</td>
+        <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center;">${reading.dialGauge3 || '-'}</td>
+        <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center;">${reading.dialGauge4 || '-'}</td>
+        <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center; color: #16a34a; font-weight: 600;">${reading.avgSettlementMm.toFixed(2)}</td>
+        <td style="border: 1px solid #e2e8f0; padding: 6px; font-size: 8pt; color: #64748b; font-style: italic;">${reading.remark || '-'}</td>
+      </tr>
+    `;
+  });
+  
+  html += `
+      </tbody>
+    </table>
+  `;
+  
+  return html;
+}
+
+/**
  * Generate the complete IVPLT report HTML.
  * Why: Creates a professional, printable HTML document for PDF conversion.
  * Structure follows IS 2911 standard report format.
@@ -1351,7 +1481,7 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
     </div>
   </div>
 
-  <!-- Page 9+: Data Table -->
+  <!-- Page 9+: Observation Sheet - Field Sheet Style -->
   <div class="page content-page">
     <div class="page-header">
       <span>${formatDate(testDate)}</span>
@@ -1359,29 +1489,10 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
     </div>
     
     <div class="section">
-      <h2 class="section-title">7.0 Load Test Data</h2>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>S.No</th>
-            <th>Phase</th>
-            <th>Load (MT)</th>
-            <th>Settlement (mm)</th>
-            <th class="signature-column">Signature</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${readings.map((r, i) => `
-            <tr>
-              <td>${i + 1}</td>
-              <td class="phase-${r.phase.toLowerCase()}">${r.phase}</td>
-              <td>${r.loadT.toFixed(2)}</td>
-              <td>${r.avgSettlementMm.toFixed(2)}</td>
-              <td class="signature-column"></td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
+      <h2 class="section-title">7.0 Observation Sheet</h2>
+      <p style="font-size: 10pt; color: #64748b; margin-bottom: 15px;">Load increment readings as per IS 2911 (Part 4)</p>
+      
+      ${generateObservationSheetHtml(readings)}
     </div>
   </div>
 

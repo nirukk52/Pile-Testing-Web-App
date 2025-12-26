@@ -50,7 +50,7 @@ const originalStdoutWrite = process.stdout.write.bind(process.stdout);
 let capturedOutput = '';
 let capturingEnabled = true;
 
-process.stdout.write = ((chunk: string | Uint8Array, encodingOrCallback?: BufferEncoding | ((err?: Error) => void), callback?: (err?: Error) => void): boolean => {
+process.stdout.write = ((chunk: string | Uint8Array, encodingOrCallback?: BufferEncoding | ((err?: Error | null) => void), callback?: (err?: Error | null) => void): boolean => {
   if (capturingEnabled) {
     // Redirect to stderr during extraction
     process.stderr.write(chunk, encodingOrCallback as BufferEncoding);

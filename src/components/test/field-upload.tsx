@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, ChevronDown, ChevronRight, Database, Cloud } from 'lucide-react';
 import type { AgentSwarmResult } from '@/lib/ai/agent-swarm';
-import { useTestStore } from '@/store/test-store';
+import { useTestStore, useApiSync } from '@/store/test-store';
 import type { LegacyProjectInfo, LoadEntry, LegacyReading } from '@/types';
 
 /**
@@ -24,6 +24,9 @@ interface FieldUploadProps {
 export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadProps) {
   const [file, setFile] = useState<File | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [isSavingToDb, setIsSavingToDb] = useState(false);
+  const [savedToDb, setSavedToDb] = useState(false);
+  const [saveProgress, setSaveProgress] = useState({ current: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -32,6 +35,10 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
   const extractionResult = useTestStore((s) => s.extractionResult);
   const setExtractionResult = useTestStore((s) => s.setExtractionResult);
   const setLoadEntries = useTestStore((s) => s.setLoadEntries);
+  const loadEntries = useTestStore((s) => s.loadEntries);
+  
+  // API sync methods for saving to database
+  const { saveTestToApi, addReadingsBatchToApi } = useApiSync();
 
   /**
    * Handles file selection from dropzone or file input.
@@ -137,29 +144,53 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
         const load = ramArea > 0 ? ((pressure * ramArea) / 1000).toFixed(2) : '0';
         
         // Create a valid timestamp from extracted date/time
-        // Extracted dates may be in formats like "9/12/15", "10-12-23", etc.
+        // CRITICAL: All extracted times are in IST (Asia/Kolkata, UTC+5:30)
+        // We must create timestamps that represent IST time correctly
         let timestamp = new Date().toISOString();
         if (reading.date && reading.time) {
           try {
-            // Try to parse the date - handle various formats
-            const dateStr = reading.date;
-            const timeStr = reading.time;
+            const dateStr = reading.date; // e.g. "2025-12-09" or "9/12/2025"
+            const timeStr = reading.time; // e.g. "04:30" (always IST)
             
-            // Try creating a date directly first
-            const testDate = new Date(`${dateStr} ${timeStr}`);
-            if (!isNaN(testDate.getTime())) {
-              timestamp = testDate.toISOString();
-            } else {
-              // Fall back to current date with the extracted time
-              const today = new Date();
-              const [hours, minutes] = timeStr.split(':').map(Number);
-              if (!isNaN(hours) && !isNaN(minutes)) {
-                today.setHours(hours, minutes, 0, 0);
-                timestamp = today.toISOString();
+            // Parse the date parts
+            let year: number, month: number, day: number;
+            
+            // Try ISO format first (YYYY-MM-DD)
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+              [year, month, day] = dateStr.split('-').map(Number);
+            } 
+            // Try DD/MM/YYYY or D/M/YYYY format
+            else if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(dateStr)) {
+              const parts = dateStr.split('/').map(Number);
+              day = parts[0];
+              month = parts[1];
+              year = parts[2] < 100 ? 2000 + parts[2] : parts[2];
+            }
+            // Try DD-MM-YYYY format
+            else if (/^\d{1,2}-\d{1,2}-\d{2,4}$/.test(dateStr)) {
+              const parts = dateStr.split('-').map(Number);
+              day = parts[0];
+              month = parts[1];
+              year = parts[2] < 100 ? 2000 + parts[2] : parts[2];
+            }
+            else {
+              throw new Error('Unknown date format');
+            }
+            
+            // Parse time parts
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            
+            if (!isNaN(year) && !isNaN(month) && !isNaN(day) && !isNaN(hours) && !isNaN(minutes)) {
+              // Create ISO string with IST offset (+05:30)
+              // Format: YYYY-MM-DDTHH:MM:00+05:30
+              const isoString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00+05:30`;
+              const istDate = new Date(isoString);
+              if (!isNaN(istDate.getTime())) {
+                timestamp = istDate.toISOString();
               }
             }
           } catch {
-            // Keep default timestamp
+            // Keep default timestamp on any parsing error
           }
         }
         
@@ -176,7 +207,7 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
           dg3Enabled: true,
           dg4Enabled: true,
           timestamp,
-          phase: 'loading', // Will be auto-detected in data entry
+          phase: reading.phase || 'loading', // Use extracted phase from agent swarm
           remark: reading.confidence === 'low' ? '⚠️ Low confidence' : '',
         };
         
@@ -190,6 +221,44 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
       });
     
     setLoadEntries(loadEntries);
+  };
+
+  /**
+   * Saves extracted readings to the database.
+   * Why: Persists all extracted readings in one batch operation for efficiency.
+   * Uses batch API to insert all readings in a single transaction (~100ms vs 10-30s).
+   */
+  const handleSaveToDatabase = async () => {
+    if (loadEntries.length === 0) {
+      setError('No readings to save. Please extract data first.');
+      return;
+    }
+
+    setIsSavingToDb(true);
+    setSavedToDb(false);
+    setError(null);
+    setSaveProgress({ current: 0, total: loadEntries.length });
+
+    try {
+      // First save the test/project info to get a test ID
+      await saveTestToApi();
+
+      // Collect all readings from entries
+      const allReadings = loadEntries
+        .map((entry) => entry.readings[0])
+        .filter((reading): reading is LegacyReading => reading !== undefined);
+
+      // Batch save all readings in a single API call
+      await addReadingsBatchToApi(allReadings);
+      setSaveProgress({ current: loadEntries.length, total: loadEntries.length });
+
+      setSavedToDb(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save readings to database');
+      console.error('Save to database error:', err);
+    } finally {
+      setIsSavingToDb(false);
+    }
   };
 
   /**
@@ -383,6 +452,41 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
             </div>
           )}
 
+          {/* Save to Database Button */}
+          {!savedToDb ? (
+            <button
+              onClick={handleSaveToDatabase}
+              disabled={isSavingToDb || loadEntries.length === 0}
+              className={`
+                w-full py-5 rounded-2xl font-bold text-xl transition-all shadow-lg flex items-center justify-center gap-3
+                ${isSavingToDb 
+                  ? 'bg-blue-400 text-white cursor-wait' 
+                  : 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'
+                }
+                ${loadEntries.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}
+              `}
+            >
+              {isSavingToDb ? (
+                <>
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                  <span>Saving {saveProgress.current}/{saveProgress.total}...</span>
+                </>
+              ) : (
+                <>
+                  <Database className="w-6 h-6" />
+                  <span>Save Readings to Database</span>
+                </>
+              )}
+            </button>
+          ) : (
+            <div className="bg-green-50 border-2 border-green-300 rounded-2xl p-5 flex items-center justify-center gap-3">
+              <Cloud className="w-6 h-6 text-green-600" />
+              <span className="font-bold text-xl text-green-700">
+                {loadEntries.length} Readings Saved to Database ✓
+              </span>
+            </div>
+          )}
+
           {/* Continue Button */}
           <button
             onClick={handleContinue}
@@ -406,4 +510,5 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
     </div>
   );
 }
+
 

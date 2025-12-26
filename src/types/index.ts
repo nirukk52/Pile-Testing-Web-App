@@ -376,6 +376,8 @@ export interface SavedTest {
   loadEntries: LoadEntry[];
   createdAt: string;
   updatedAt: string;
+  /** Cached reading count from API _count - used for list display without loading all readings */
+  readingsCount?: number;
 }
 
 /**
