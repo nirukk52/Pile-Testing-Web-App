@@ -91,3 +91,4 @@ export async function mergePdfsFromSupabase(
   console.log(`Final PDF has ${mainPdf.getPageCount()} pages`);
   return Buffer.from(mergedPdfBytes);
 }
+

@@ -3,15 +3,17 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { HomeScreen, ProfileModal } from '@/components/home';
+import { LandingPage } from '@/components/landing';
 import { useTestStore, useApiSync } from '@/store/test-store';
 
 /**
  * Home page - entry point for the app.
- * Why: Shows list of tests and allows creating new ones.
+ * Why: Shows Landing Page for new users, or Dashboard (HomeScreen) for returning users.
  */
 export default function HomePage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
+  const [showLanding, setShowLanding] = useState(true);
 
   // Store state
   const view = useTestStore((s) => s.view);
@@ -36,6 +38,20 @@ export default function HomePage() {
     loadTestsFromApi();
   }, [loadTestsFromApi]);
 
+  // Determine if we should show landing page or dashboard
+  useEffect(() => {
+    if (mounted) {
+       // If we have tests OR a user profile, assume returning user -> Show Dashboard
+       // Otherwise -> Show Landing Page
+       const hasTests = getTestSummaries().length > 0;
+       const hasProfile = !!userProfile.name;
+       
+       if (hasTests || hasProfile) {
+         setShowLanding(false);
+       }
+    }
+  }, [mounted, userProfile, getTestSummaries]);
+
   // Redirect to test page when a test is opened
   useEffect(() => {
     if (view === 'test') {
@@ -50,6 +66,15 @@ export default function HomePage() {
         <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
       </div>
     );
+  }
+  
+  // Handler to "Get Started" from Landing Page
+  const handleGetStarted = () => {
+    setShowLanding(false);
+  };
+
+  if (showLanding) {
+    return <LandingPage onGetStarted={handleGetStarted} />;
   }
 
   const testSummaries = getTestSummaries();

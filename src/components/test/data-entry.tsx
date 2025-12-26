@@ -572,16 +572,19 @@ export function DataEntry({
 
                         const loadDate = new Date(reading.timestamp);
                         const dateStr = formatDateDDMMYYYY(loadDate);
+                        // Display in IST (Asia/Kolkata) - all field times are in Indian Standard Time
                         const timeStr = loadDate.toLocaleTimeString('en-US', {
                           hour: '2-digit',
                           minute: '2-digit',
                           hour12: false,
+                          timeZone: 'Asia/Kolkata',
                         });
                         // Format time for delete modal (12h format)
                         const timeStr12h = loadDate.toLocaleTimeString('en-US', {
                           hour: '2-digit',
                           minute: '2-digit',
                           hour12: true,
+                          timeZone: 'Asia/Kolkata',
                         });
 
                         const avg = calculateAverageSettlement(

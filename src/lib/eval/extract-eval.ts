@@ -100,9 +100,9 @@ async function convertPdfToImages(pdfPath: string): Promise<string[]> {
  *   5. Row Estimator - insert blank rows for missing data
  */
 async function extractFromFieldSheet(pdfPath: string): Promise<ExtractedData> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error('OPENAI_API_KEY not configured. Set it in your environment.');
+    throw new Error('GOOGLE_API_KEY or GEMINI_API_KEY not configured. Set it in your environment.');
   }
 
   // Convert PDF to images
@@ -257,9 +257,19 @@ export function runEvaluation(
     config
   );
   
-  // Compare readings
-  const readingsComparisons = expected.readings.map((expectedReading, index) => {
-    const extractedReading = extracted.readings[index] || {};
+  // Build a map of extracted readings by sequence number for O(1) lookup
+  // Why: Match readings by sequence field, not array index. 
+  // This handles cases where extracted readings may be out of order or have gaps.
+  const extractedBySequence = new Map<number, ExtractedData['readings'][0]>();
+  for (const reading of extracted.readings) {
+    if (reading.sequence !== undefined) {
+      extractedBySequence.set(reading.sequence, reading);
+    }
+  }
+  
+  // Compare readings by matching sequence numbers
+  const readingsComparisons = expected.readings.map((expectedReading) => {
+    const extractedReading = extractedBySequence.get(expectedReading.sequence) || {};
     return compareReading(expectedReading, extractedReading, config);
   });
   
@@ -333,16 +343,19 @@ export function runEvaluation(
 /**
  * Main entry point for extraction eval.
  * Why: Orchestrates the full eval flow.
+ * 
+ * DEFAULT BEHAVIOR: Always runs fresh extraction (tests latest agent code).
+ * Use --use-cache flag to skip extraction and use cached results.
  */
 export async function runExtractEval(
   reportId: string,
   options: {
-    reextract?: boolean;
+    useCache?: boolean;  // If true, uses cached extraction instead of running fresh extraction
     config?: EvalConfig;
     verbose?: boolean;
   } = {}
 ): Promise<EvalResult> {
-  const { reextract = false, config = DEFAULT_EVAL_CONFIG, verbose = true } = options;
+  const { useCache = false, config = DEFAULT_EVAL_CONFIG, verbose = true } = options;
   
   if (verbose) {
     console.log(`\n🔍 Running extraction eval for ${reportId}...\n`);
@@ -354,12 +367,16 @@ export async function runExtractEval(
     console.log(`✅ Loaded expected data: ${expected.readings.length} readings`);
   }
   
-  // Check for existing extraction
-  let extracted = loadExtractedData(reportId);
+  // Check for cached extraction
+  let extracted = useCache ? loadExtractedData(reportId) : null;
   
-  if (!extracted || reextract) {
+  if (!extracted) {
+    // DEFAULT: Always run fresh extraction (tests latest agent code)
     if (verbose) {
-      console.log('🤖 Running Vision API extraction...');
+      console.log('🤖 Running fresh Vision API extraction...');
+      if (useCache) {
+        console.log('   ⚠️  --use-cache flag was set but no cached extraction found');
+      }
     }
     
     // Find field sheet PDF
@@ -382,9 +399,11 @@ export async function runExtractEval(
     
     saveExtractedData(reportId, extracted);
   } else {
+    // Using cached extraction (only if --use-cache flag was explicitly set)
     if (verbose) {
-      console.log(`✅ Using cached extraction from ${extracted.extractedAt}`);
-      console.log(`   (Run with --reextract to force new extraction)`);
+      console.log(`📦 Using cached extraction from ${extracted.extractedAt}`);
+      console.log(`   ⚠️  Note: This tests OLD extraction code, not your latest changes!`);
+      console.log(`   💡 Remove --use-cache flag to test latest extraction agent`);
     }
   }
   
@@ -415,22 +434,36 @@ export async function runExtractEval(
 /**
  * CLI entry point for running evals from command line.
  * Why: Allows running evals directly via `npx tsx src/lib/eval/extract-eval.ts report-001`
+ * 
+ * DEFAULT: Always runs fresh extraction (tests latest agent code)
+ * Use --use-cache to skip extraction and use cached results
  */
 async function main() {
   const args = process.argv.slice(2);
   
   if (args.length === 0) {
-    console.log('Usage: npx tsx src/lib/eval/extract-eval.ts <report-id> [--reextract]');
-    console.log('Example: npx tsx src/lib/eval/extract-eval.ts report-001');
-    console.log('         npx tsx src/lib/eval/extract-eval.ts report-001 --reextract');
+    console.log('Usage: npx tsx src/lib/eval/extract-eval.ts <report-id> [--use-cache]');
+    console.log('');
+    console.log('Examples:');
+    console.log('  npx tsx src/lib/eval/extract-eval.ts report-001');
+    console.log('    → Runs FRESH extraction (tests latest agent code)');
+    console.log('');
+    console.log('  npx tsx src/lib/eval/extract-eval.ts report-001 --use-cache');
+    console.log('    → Uses cached extraction (skips API call, faster)');
+    console.log('    → ⚠️  Only use this when testing evaluation logic, not extraction');
     process.exit(1);
   }
   
   const reportId = args[0];
-  const reextract = args.includes('--reextract');
+  const useCache = args.includes('--use-cache');
+  
+  if (useCache) {
+    console.log('⚠️  --use-cache flag detected: Will use cached extraction (if available)');
+    console.log('   This tests OLD extraction code, not your latest changes!\n');
+  }
   
   try {
-    const result = await runExtractEval(reportId, { reextract });
+    const result = await runExtractEval(reportId, { useCache });
     
     console.log('\n' + '='.repeat(50));
     if (result.passed) {

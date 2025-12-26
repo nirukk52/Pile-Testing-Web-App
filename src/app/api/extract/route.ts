@@ -77,11 +77,11 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Check API key
-    const apiKey = process.env.OPENAI_API_KEY;
+    // Check API key (Agent Swarm uses Gemini)
+    const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'OpenAI API key not configured' },
+        { error: 'GOOGLE_API_KEY or GEMINI_API_KEY not configured' },
         { status: 500 }
       );
     }

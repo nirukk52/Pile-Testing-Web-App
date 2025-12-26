@@ -97,6 +97,7 @@ export function HomeScreen({
               const timeStr = createdDate.toLocaleTimeString('en-US', {
                 hour: '2-digit',
                 minute: '2-digit',
+                timeZone: 'Asia/Kolkata',
               });
 
               return (

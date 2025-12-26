@@ -287,3 +287,102 @@ The script returns JSON with error details:
 - Add comments to cells with complex formulas or important assumptions
 - Document data sources for hardcoded values
 - Include notes for key calculations and model sections
+
+---
+
+# Domain: Pile Test Data Extraction (PileTest Pro)
+
+## Key Learnings for Parsing Pile Test Excel Files
+
+### 1. Always Check ALL Sheets
+- Excel files often have chart sheets first (e.g., "Chart1", "Chart2", "can be anything")
+- Data may be distributed across multiple sheets (loading/unloading/pages)
+- Skip sheets with `chart` or `graph` in the name
+- Parse ALL data sheets and merge results
+
+```javascript
+// Node.js with xlsx library
+const dataSheets = workbook.SheetNames.filter(name => {
+  const lower = name.toLowerCase();
+  return !lower.includes('chart') && !lower.includes('graph');
+});
+```
+
+### 2. Multi-Row Headers
+Pile test files often have headers spanning 3-4 rows:
+```
+Row 12: DATE | TIME | PRESSURE  | LOAD IN MT | Dial Gauge  |     |     |     | AVERAGE
+Row 13:      |      |  GAUGE    |            |             |     |     |     | SETTLEMENT
+Row 14:      |      |  READING  |            | Reading     | ... | ... | ... | IN MM
+Row 15:      | (Hrs)| kg/cm2    |            | 1           | 2   | 3   | 4   |
+```
+
+**Solution**: Combine 4 header rows to identify columns:
+```javascript
+const combinedHeader = `${row12[i]} ${row13[i]} ${row14[i]} ${row15[i]}`.toLowerCase();
+```
+
+### 3. Numbered Sub-Headers for Dial Gauges
+Dial gauge columns often have numbered sub-headers (1, 2, 3, 4) in a separate row below the main header.
+
+```javascript
+// Look for numeric sub-headers
+for (let i = 0; i < headerRow4.length; i++) {
+  const num = parseFloat(String(headerRow4[i] || ''));
+  if (num === 1) columnMap.dg1 = i;
+  if (num === 2) columnMap.dg2 = i;
+  // ...
+}
+```
+
+### 4. Phase Markers in Data Rows
+Phase changes (LOADING, UNLOADING, HOLDING) appear as row values:
+```javascript
+const firstCell = String(row[0] || '').toLowerCase();
+if (firstCell.includes('loading') && !firstCell.includes('un')) phase = 'loading';
+if (firstCell.includes('unloading')) phase = 'unloading';
+if (firstCell.includes('hold')) phase = 'holding';
+```
+
+### 5. Hold Readings Without Pressure
+Many rows are "hold" readings during a load increment - they have dial gauge values but NO new pressure value. Include these rows!
+
+```javascript
+const hasDialGaugeData = !isNaN(parseFloat(row[dgCol]));
+// Don't skip just because pressure is empty
+if (hasDialGaugeData) includeRow = true;
+```
+
+### 6. Repeated Page Headers
+Multi-page reports often repeat headers on each page. Skip rows containing:
+- `page`, `zedgeo`, `record`, `project`, `location`, `client`, `contractor`
+- Sub-header markers like `(Hrs)`, `kg/cm2`, `reading`
+
+### 7. De-duplicate Across Sheets
+Same data may appear on multiple sheets. De-duplicate by creating a unique key:
+```javascript
+const key = `${dg1}-${dg2}-${dg3}-${dg4}-${timestamp}`;
+```
+
+### 8. Project Info Extraction
+Project metadata often has format `Label:- Value` or `Label :- Value`:
+```javascript
+const match = cellValue.match(/[:\-]+\s*(.+)$/);
+if (match) value = match[1].trim();
+```
+
+### Common Column Layout
+```
+Col 0: DATE (often empty or Excel serial)
+Col 1: TIME (decimal hours like 17.29)
+Col 2: PRESSURE GAUGE (kg/cm2)
+Col 3: LOAD IN MT
+Col 4-7: Dial Gauges 1-4
+Col 8: AVERAGE SETTLEMENT
+Col 9: REMARK
+```
+
+### Confidence Scoring
+- Rows with pressure value: 95% confidence
+- Hold rows (no pressure, has dial gauges): 70% confidence
+- Fixed column fallback: 80% confidence

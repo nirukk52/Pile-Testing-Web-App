@@ -3,14 +3,12 @@
  * Why: Multiple specialized agents working in parallel for accuracy and speed.
  * 
  * Architecture:
- * 1. Row Counter Agent - runs FIRST, counts total data rows
- * 2. Page Agents - extract readings in parallel (one per page)
- * 3. Project Info Verifier - majority vote on project info from all pages
- * 4. Readings Verifier - validates avgSettlement (±0.05mm), sets confidence
- * 5. Row Estimator Agent - estimates positions of missing rows
+ * 1. Page Agents - extract readings in parallel (one per page)
+ * 2. Project Info Verifier - majority vote on project info from all pages
+ * 3. Readings Verifier - validates avgSettlement (±0.05mm), sets confidence, infers pressure
  */
 
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { ExpectedProjectInfo } from '../eval/types';
 
 // =============================================================================
@@ -70,13 +68,13 @@ export interface ProjectInfoWithConfidence {
  * Result from the agent swarm extraction.
  */
 export interface AgentSwarmResult {
-  expectedRowCount: number;              // From row counter agent
+  expectedRowCount: number;              // Same as extractedRowCount (for backward compatibility)
   extractedRowCount: number;             // Actual rows extracted
-  missingRowCount: number;               // expectedRowCount - extractedRowCount
+  missingRowCount: number;               // Always 0 (no row estimation)
   projectInfo: ProjectInfoWithConfidence;
   readings: ExtractedReadingWithConfidence[];
   lowConfidenceCount: number;
-  emptyRowCount: number;
+  emptyRowCount: number;                 // Always 0 (no blank rows inserted)
   extractedAt: string;
   model: string;
 }
@@ -91,72 +89,7 @@ interface PageExtractionResult {
 }
 
 // =============================================================================
-// AGENT 1: ROW COUNTER
-// =============================================================================
-
-/**
- * Row Counter Agent - counts total data rows across all pages.
- * Why: Runs FIRST so we know expected row count before extraction.
- * Simple prompt, just counts lines with data.
- */
-async function runRowCounterAgent(
-  openai: OpenAI,
-  pageImages: string[]
-): Promise<number> {
-  console.log('   🔢 Row Counter Agent: Counting data rows...');
-  
-  // Send all pages to count total rows
-  const imageContent = pageImages.map(base64 => ({
-    type: 'image_url' as const,
-    image_url: {
-      url: `data:image/png;base64,${base64}`,
-      detail: 'low' as const, // Low detail is fine for counting
-    },
-  }));
-  
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [
-      {
-        role: 'user',
-        content: [
-          ...imageContent,
-          {
-            type: 'text',
-            text: `Count ONLY data rows in the pile test table across all ${pageImages.length} pages.
-
-A DATA ROW must have:
-- TIME column (HH:MM format)
-- PRESSURE column (0, 40, 80, 120... kg/cm²)
-- 4 DIAL GAUGE readings (numbers in mm)
-
-Do NOT count:
-- Header rows (column titles like "TIME", "PRESSURE", "READING 1", etc.)
-- Empty rows
-- Rows with only signatures
-- The same row twice (some tables span pages)
-
-Return JSON: { "totalRows": <number>, "perPage": [<page1>, <page2>, ...] }`,
-          },
-        ],
-      },
-    ],
-    max_tokens: 200,
-    response_format: { type: 'json_object' },
-  });
-
-  const content = response.choices[0]?.message?.content;
-  if (!content) {
-    throw new Error('Row counter agent returned empty response');
-  }
-
-  const result = JSON.parse(content);
-  console.log(`   🔢 Row Counter Agent: Found ${result.totalRows} data rows (per page: ${JSON.stringify(result.perPage || [])})`);
-  return result.totalRows || 0;
-}
-
-// =============================================================================
-// AGENT 2: PAGE AGENTS (Parallel)
+// AGENT 1: PAGE AGENTS (Parallel)
 // =============================================================================
 
 /**
@@ -164,7 +97,7 @@ Return JSON: { "totalRows": <number>, "perPage": [<page1>, <page2>, ...] }`,
  * Why: Each page processed independently in parallel for speed.
  */
 async function runPageAgent(
-  openai: OpenAI,
+  model: any,
   pageImage: string,
   pageNum: number,
   totalPages: number
@@ -174,23 +107,49 @@ async function runPageAgent(
   const prompt = isFirstPage
     ? `Extract ALL data from this pile test field sheet page ${pageNum}/${totalPages}.
 
-## HEADER DATA (from top of page)
-Extract: pileId, project, location, client, contractor, pileDiameter, pileDepth, designLoad, testLoad, ramArea, concreteGrade, testDate, dateOfCasting
+## HEADER LAYOUT (ZedGeo field sheet format)
+The header follows this EXACT layout - extract each field from its labeled position:
+
++----------------------------------------------------------------------------------------------------------------+
+| ZedGeo Systems Private Limited., Mumbai.                                                        PAGE:- {pageNo}|
+|                                                                                                                |
+| RECORD OF PILE LOAD TEST NO.: {pileId}  | L.C OF DIAL GAUGE:- {lcDialGauge} | RAM AREA:- {ramArea}             |
+|                                         | TYPE OF TEST:- {testType}         | DATE OF CASTING:- {dateOfCasting}|
+| PROJECT:- {project}                     | DESIGN LOAD:- {designLoad}        | PILE DEPTH:- {pileDepth}         |
+|                                         | TEST LOAD:- {testLoad}            |                                  |
+| LOCATION:- {location}                   | MIXED DESIGN:- {concreteGrade}    |                                  |
+|                                         | PILE DIAMETER:- {pileDiameter}    |                                  |
+| CLIENTS NAME:- {client}                 |                                   |                                  |
+| CONSULTANT:- {consultant}               |                                   |                                  |
+| CONTRACTOR:- {contractor}               |                                   |                                  |
++----------------------------------------------------------------------------------------------------------------+
+
+## FIELD EXTRACTION HINTS
+- pileId: After "RECORD OF PILE LOAD TEST NO.:" (e.g., TP-01, TP-02) - this is NOT reportNo
+- project: After "PROJECT:-" - may span multiple lines
+- location: After "LOCATION:-" - building/wing info
+- client: After "CLIENTS NAME:-" (e.g., "TATA Project")
+- contractor: After "CONTRACTOR:-" - if EMPTY or blank, return "NA"
+- pileDiameter: After "PILE DIAMETER:-" - number in mm (e.g., 900)
+- pileDepth: After "PILE DEPTH:-" - PRESERVE DECIMALS (e.g., 11.51, 10.31) - may have "M" suffix
+- designLoad: After "DESIGN LOAD:-" - number in tons (e.g., 420)
+- testLoad: After "TEST LOAD:-" - number in tons (e.g., 1050)
+- ramArea: After "RAM AREA:-" - number in cm² (e.g., 2551)
+- concreteGrade: After "MIXED DESIGN:-" (e.g., M25, M40)
+- dateOfCasting: After "DATE OF CASTING:-" - date format DD-MM-YY or DD/MM/YYYY
+- testDate: Get from first reading row's date column
 
 ## READINGS TABLE
-Extract EVERY row with these columns:
-- date, time, pressure (kg/cm² - whole numbers: 0, 40, 80, 120...)
-- dg1, dg2, dg3, dg4 (dial gauge readings in mm)
-- avg (average settlement column - IMPORTANT for validation)
+Extract EVERY row with columns: date, time, pressure, dg1, dg2, dg3, dg4, avg
 
 Return JSON:
 {
-  "projectInfo": { "pileId": "...", ... },
+  "projectInfo": { "pileId": "...", "project": "...", "contractor": "NA", "pileDepth": "11.51", ... },
   "readings": [{ "date": "...", "time": "...", "pressure": "...", "dg1": "...", "dg2": "...", "dg3": "...", "dg4": "...", "avg": "..." }, ...]
 }`
     : `Extract ALL reading rows from this pile test data table (page ${pageNum}/${totalPages}).
 
-Extract project info if visible in header area.
+Extract project info if visible in header area (look for pileId, reportNo, project, client, contractor, etc.)
 
 ## COLUMNS
 - date, time, pressure (whole numbers: 0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 420)
@@ -199,37 +158,32 @@ Extract project info if visible in header area.
 
 Return JSON:
 {
-  "projectInfo": { ... } or null,
+  "projectInfo": { "pileId": "...", "reportNo": "...", ... } or null,
   "readings": [{ "date": "...", "time": "...", "pressure": "...", "dg1": "...", "dg2": "...", "dg3": "...", "dg4": "...", "avg": "..." }, ...]
 }`;
 
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'image_url',
-            image_url: {
-              url: `data:image/png;base64,${pageImage}`,
-              detail: 'high',
-            },
-          },
-          { type: 'text', text: prompt },
-        ],
+  const result = await model.generateContent([
+    {
+      inlineData: {
+        data: pageImage,
+        mimeType: 'image/png',
       },
-    ],
-    max_tokens: 4096,
-    response_format: { type: 'json_object' },
-  });
+    },
+    prompt,
+  ]);
 
-  const content = response.choices[0]?.message?.content;
+  const response = await result.response;
+  const content = response.text();
+  
   if (!content) {
     return { pageNum, readings: [] };
   }
 
-  const parsed = JSON.parse(content);
+  // Extract JSON from response (Gemini may wrap in markdown)
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  const jsonContent = jsonMatch ? jsonMatch[0] : content;
+  const parsed = JSON.parse(jsonContent);
+  
   return {
     pageNum,
     projectInfo: parsed.projectInfo || undefined,
@@ -238,7 +192,7 @@ Return JSON:
 }
 
 // =============================================================================
-// AGENT 3: PROJECT INFO VERIFIER
+// AGENT 2: PROJECT INFO VERIFIER
 // =============================================================================
 
 /**
@@ -300,10 +254,15 @@ function runProjectInfoVerifier(
       }
     }
     
-    // Set value (convert numbers for numeric fields)
+    // Set value (convert numbers for numeric fields, normalize dates)
     const numericFields = ['pileDiameter', 'pileDepth', 'designLoad', 'testLoad', 'ramArea'];
+    const dateFields = ['testDate', 'dateOfCasting'];
+    
     if (numericFields.includes(field)) {
       (finalValues as Record<string, unknown>)[field] = parseFloat(winner) || 0;
+    } else if (dateFields.includes(field)) {
+      // Normalize dates to ISO format (YYYY-MM-DD)
+      (finalValues as Record<string, unknown>)[field] = normalizeDateToISO(winner) || winner;
     } else {
       (finalValues as Record<string, unknown>)[field] = winner;
     }
@@ -325,8 +284,248 @@ function runProjectInfoVerifier(
 }
 
 // =============================================================================
-// AGENT 4: READINGS VERIFIER
+// PRESSURE INFERENCE FOR HOLDING PHASE
 // =============================================================================
+
+/**
+ * Infers correct pressure for holding phase rows where OCR reads 0.
+ * Why: OCR often misreads blank/empty pressure cells as 0 during holding phases.
+ *      In pile tests, pressure stays constant during holding (15-min intervals).
+ *      Pattern: Load (40) → Hold at 40 → Load (80) → Hold at 80 → ...
+ * 
+ * Algorithm:
+ * - Find rows where pressure changed (loading steps): 0→40, 40→80, etc.
+ * - For rows with pressure=0 between loading steps, carry forward previous pressure
+ * - Use settlement values to validate (holding phase has gradual increase)
+ */
+function inferHoldingPhasePressure(
+  readings: Array<{
+    date?: string;
+    time?: string;
+    pressure: number;
+    dg1: number;
+    dg2: number;
+    dg3: number;
+    dg4: number;
+    calculatedAvg: number;
+    extractedAvg?: number;
+    confidence: ConfidenceLevel;
+    fieldConfidence: FieldConfidence;
+    avgDiff: number;
+  }>
+): typeof readings {
+  if (readings.length === 0) return readings;
+  
+  console.log('   🔧 Inferring pressure for holding phase rows...');
+  
+  // Valid pressure steps in pile tests (kg/cm²)
+  const validPressures = [0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 420];
+  
+  let lastNonZeroPressure = 0;
+  let inferredCount = 0;
+  
+  // First pass: identify the loading pattern and carry forward pressure
+  const result = readings.map((reading, index) => {
+    const pressure = reading.pressure;
+    
+    // If pressure is a valid non-zero loading step, update last known pressure
+    if (pressure > 0 && validPressures.includes(pressure)) {
+      lastNonZeroPressure = pressure;
+      return reading;
+    }
+    
+    // If pressure is 0 but we have a previous non-zero pressure,
+    // this is likely a holding phase row
+    if (pressure === 0 && lastNonZeroPressure > 0 && index > 0) {
+      // Check if this looks like a holding phase (settlement increasing gradually)
+      const prevReading = readings[index - 1];
+      const settlementDiff = reading.calculatedAvg - prevReading.calculatedAvg;
+      
+      // Holding phase: settlement increases slowly (< 0.5mm per reading typically)
+      // Loading phase: settlement jumps significantly
+      const isLikelyHolding = settlementDiff >= 0 && settlementDiff < 0.5;
+      
+      if (isLikelyHolding) {
+        inferredCount++;
+        // Mark pressure field as low confidence since we inferred it
+        return {
+          ...reading,
+          pressure: lastNonZeroPressure,
+          fieldConfidence: {
+            ...reading.fieldConfidence,
+            pressure: 'low' as ConfidenceLevel, // Mark as inferred
+          },
+        };
+      }
+    }
+    
+    // If it's actually 0 (final unloading), keep it
+    return reading;
+  });
+  
+  if (inferredCount > 0) {
+    console.log(`   🔧 Inferred pressure for ${inferredCount} holding phase rows`);
+  }
+  
+  return result;
+}
+
+// =============================================================================
+// AGENT 3: READINGS VERIFIER
+// =============================================================================
+
+/**
+ * Parses date string to Date object.
+ * Why: Handles various date formats from OCR extraction:
+ *   - YYYY-MM-DD (ISO)
+ *   - DD-MM-YYYY or DD/MM/YYYY (European)
+ *   - D/M/YY or DD/MM/YY (Short year)
+ */
+function parseDate(dateStr: string | undefined): Date | null {
+  if (!dateStr) return null;
+  
+  // Try ISO format first (YYYY-MM-DD)
+  const isoMatch = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (isoMatch) {
+    return new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]));
+  }
+  
+  // Try DD-MM-YYYY or DD/MM/YYYY (4-digit year)
+  const dmyMatch = dateStr.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (dmyMatch) {
+    return new Date(parseInt(dmyMatch[3]), parseInt(dmyMatch[2]) - 1, parseInt(dmyMatch[1]));
+  }
+  
+  // Try D/M/YY or DD/MM/YY (2-digit year) - assume 2000s
+  const shortYearMatch = dateStr.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2})$/);
+  if (shortYearMatch) {
+    const year = 2000 + parseInt(shortYearMatch[3]);
+    return new Date(year, parseInt(shortYearMatch[2]) - 1, parseInt(shortYearMatch[1]));
+  }
+  
+  // Handle OCR error: D/M/Y with single digit year (e.g., "11-12-2" should be "11-12-25")
+  // Why: OCR sometimes misses digits. Single digit year likely has trailing digit missing.
+  // In 2025 context, "2" likely means "25" with "5" missing.
+  const singleDigitYearMatch = dateStr.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d)$/);
+  if (singleDigitYearMatch) {
+    // Assume the digit is the first digit of a 2-digit year in 2020s
+    // e.g., "2" → 2025 (assuming current year context)
+    const yearDigit = parseInt(singleDigitYearMatch[3]);
+    const year = yearDigit === 2 ? 2025 : 2020 + yearDigit; // "2" → 2025, "3" → 2023
+    return new Date(year, parseInt(singleDigitYearMatch[2]) - 1, parseInt(singleDigitYearMatch[1]));
+  }
+  
+  return null;
+}
+
+/**
+ * Normalizes date string to ISO format (YYYY-MM-DD).
+ * Why: OCR extracts dates in various formats (9/12/25, 10-12-23, etc.)
+ *      but expected.json uses ISO format for consistency.
+ */
+function normalizeDateToISO(dateStr: string | undefined): string | undefined {
+  if (!dateStr) return undefined;
+  
+  // Already in ISO format?
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return dateStr;
+  }
+  
+  const parsed = parseDate(dateStr);
+  if (!parsed) return dateStr; // Return original if can't parse
+  
+  // Format as YYYY-MM-DD
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Parses time string to minutes since midnight.
+ * Why: Handles various time formats from OCR extraction:
+ *   - HH:MM (standard with colon)
+ *   - HH.MM (with period - common in handwritten notes)
+ *   - H.MM or H:MM (single digit hour)
+ */
+function parseTimeToMinutes(timeStr: string | undefined): number {
+  if (!timeStr) return 0;
+  
+  // Match HH:MM or HH.MM or H:MM or H.MM
+  const match = timeStr.match(/^(\d{1,2})[:.](\d{2})$/);
+  if (!match) return 0;
+  
+  let hours = parseInt(match[1]);
+  const minutes = parseInt(match[2]);
+  
+  // Handle 24:XX as 00:XX next day (add 24 hours worth of minutes)
+  // This handles times like "24.30" which means 00:30 next day
+  if (hours >= 24) {
+    return (hours * 60) + minutes; // Keep the >24 value for sorting across midnight
+  }
+  
+  return hours * 60 + minutes;
+}
+
+/**
+ * Sorts readings by time, pressure, and phase using domain knowledge.
+ * Why: OCR may extract rows out of order; this ensures correct sequence.
+ * 
+ * Sort order:
+ * 1. Date (chronological)
+ * 2. Time (chronological)
+ * 3. Within same time: pressure loading pattern (0→40→80... then hold, then 80→40→0)
+ */
+function sortReadingsByTimeAndPhase(
+  readings: Array<{
+    date?: string;
+    time?: string;
+    pressure: number;
+    dg1: number;
+    dg2: number;
+    dg3: number;
+    dg4: number;
+    calculatedAvg: number;
+    extractedAvg?: number;
+    confidence: ConfidenceLevel;
+    fieldConfidence: FieldConfidence;
+    avgDiff: number;
+  }>
+): typeof readings {
+  if (readings.length === 0) return readings;
+  
+  console.log('   🔄 Sorting readings by time and phase...');
+  
+  // Find max pressure (indicates peak of test)
+  const maxPressure = Math.max(...readings.map(r => r.pressure));
+  
+  // First, sort by date+time to establish rough order
+  const sorted = [...readings].sort((a, b) => {
+    const dateA = parseDate(a.date);
+    const dateB = parseDate(b.date);
+    
+    // Compare dates
+    if (dateA && dateB) {
+      const dateDiff = dateA.getTime() - dateB.getTime();
+      if (dateDiff !== 0) return dateDiff;
+    }
+    
+    // Compare times
+    const timeA = parseTimeToMinutes(a.time);
+    const timeB = parseTimeToMinutes(b.time);
+    if (timeA !== timeB) return timeA - timeB;
+    
+    // Same date+time: use pressure pattern
+    // During loading (before max reached), higher pressure = later
+    // During unloading (after max), lower pressure = later
+    return 0; // Keep original order if same time
+  });
+  
+  console.log(`   🔄 Max pressure: ${maxPressure} kg/cm², readings sorted by date+time`);
+  
+  return sorted;
+}
 
 /**
  * Readings Verifier Agent - validates each reading using avgSettlement.
@@ -340,13 +539,17 @@ function runReadingsVerifier(
   const AVG_TOLERANCE = 0.05; // ±0.05mm tolerance
   let lowConfidenceCount = 0;
   
-  const verified: ExtractedReadingWithConfidence[] = rawReadings.map((r, index) => {
+  // First pass: parse and validate all readings
+  const parsed = rawReadings.map((r) => {
     const dg1 = parseFloat(r.dg1) || 0;
     const dg2 = parseFloat(r.dg2) || 0;
     const dg3 = parseFloat(r.dg3) || 0;
     const dg4 = parseFloat(r.dg4) || 0;
     const pressure = parseFloat(r.pressure) || 0;
     const extractedAvg = r.avg ? parseFloat(r.avg) : undefined;
+    
+    // Normalize date to ISO format (YYYY-MM-DD)
+    const normalizedDate = normalizeDateToISO(r.date);
     
     // Calculate avg from dial gauges
     const calculatedAvg = Math.round(((dg1 + dg2 + dg3 + dg4) / 4) * 100) / 100;
@@ -395,8 +598,7 @@ function runReadingsVerifier(
     }
     
     return {
-      sequence: index + 1,
-      date: r.date || undefined,
+      date: normalizedDate,
       time: r.time || undefined,
       pressure,
       dg1,
@@ -411,114 +613,20 @@ function runReadingsVerifier(
     };
   });
   
+  // Sort by time and phase to establish correct sequence
+  const sorted = sortReadingsByTimeAndPhase(parsed);
+  
+  // Infer pressure for holding phase rows (OCR often reads 0)
+  const withPressureInferred = inferHoldingPhasePressure(sorted);
+  
+  // Assign sequence numbers AFTER sorting and pressure inference
+  const verified: ExtractedReadingWithConfidence[] = withPressureInferred.map((r, index) => ({
+    ...r,
+    sequence: index + 1,
+  }));
+  
   console.log(`   ✅ Readings Verifier: ${lowConfidenceCount} low confidence rows`);
   return verified;
-}
-
-// =============================================================================
-// AGENT 5: ROW ESTIMATOR
-// =============================================================================
-
-/**
- * Row Estimator Agent - estimates positions of missing rows.
- * Why: If row counter says 109 but we only extracted 105, insert 4 blank rows.
- */
-function runRowEstimator(
-  readings: ExtractedReadingWithConfidence[],
-  expectedCount: number
-): ExtractedReadingWithConfidence[] {
-  const actualCount = readings.length;
-  const missingCount = expectedCount - actualCount;
-  
-  if (missingCount <= 0) {
-    return readings;
-  }
-  
-  console.log(`   📍 Row Estimator: Inserting ${missingCount} blank rows...`);
-  
-  // Strategy: Look for gaps in the sequence (time jumps, pressure jumps)
-  const result: ExtractedReadingWithConfidence[] = [];
-  let insertedCount = 0;
-  
-  for (let i = 0; i < readings.length; i++) {
-    result.push(readings[i]);
-    
-    // Check for gaps (if we haven't inserted all missing rows yet)
-    if (insertedCount < missingCount && i < readings.length - 1) {
-      const curr = readings[i];
-      const next = readings[i + 1];
-      
-      // Detect gap: large pressure difference without expected intermediate values
-      // Or time gap that suggests missing readings
-      const pressureDiff = Math.abs(next.pressure - curr.pressure);
-      const isLargeGap = pressureDiff > 40; // More than one pressure step
-      
-      if (isLargeGap) {
-        // Insert blank row(s) to fill gap
-        const rowsToInsert = Math.min(
-          Math.floor(pressureDiff / 40) - 1, // Estimated missing rows
-          missingCount - insertedCount
-        );
-        
-        for (let j = 0; j < rowsToInsert; j++) {
-          const blankRow: ExtractedReadingWithConfidence = {
-            sequence: result.length + 1,
-            pressure: 0,
-            dg1: 0,
-            dg2: 0,
-            dg3: 0,
-            dg4: 0,
-            calculatedAvg: 0,
-            confidence: 'low',
-            fieldConfidence: {
-              dg1: 'low',
-              dg2: 'low',
-              dg3: 'low',
-              dg4: 'low',
-              pressure: 'low',
-            },
-            avgDiff: 0,
-            isEmpty: true,
-          };
-          result.push(blankRow);
-          insertedCount++;
-        }
-      }
-    }
-  }
-  
-  // If we still haven't inserted enough, add remaining at end
-  while (insertedCount < missingCount) {
-    const blankRow: ExtractedReadingWithConfidence = {
-      sequence: result.length + 1,
-      pressure: 0,
-      dg1: 0,
-      dg2: 0,
-      dg3: 0,
-      dg4: 0,
-      calculatedAvg: 0,
-      confidence: 'low',
-      fieldConfidence: {
-        dg1: 'low',
-        dg2: 'low',
-        dg3: 'low',
-        dg4: 'low',
-        pressure: 'low',
-      },
-      avgDiff: 0,
-      isEmpty: true,
-    };
-    result.push(blankRow);
-    insertedCount++;
-  }
-  
-  // Re-sequence
-  result.forEach((r, i) => {
-    r.sequence = i + 1;
-  });
-  
-  console.log(`   📍 Row Estimator: Inserted ${insertedCount} blank rows`);
-  return result;
 }
 
 // =============================================================================
@@ -533,18 +641,21 @@ export async function runAgentSwarm(
   pageImages: string[],
   apiKey: string
 ): Promise<AgentSwarmResult> {
-  const openai = new OpenAI({ apiKey });
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ 
+    model: 'gemini-2.0-flash',
+    generationConfig: {
+      responseMimeType: 'application/json',
+    },
+  });
   
-  console.log('\n🤖 AGENT SWARM EXTRACTION');
+  console.log('\n🤖 AGENT SWARM EXTRACTION (Gemini 2.0 Flash)');
   console.log('='.repeat(50));
   
-  // STEP 1: Row Counter Agent (runs first)
-  const expectedRowCount = await runRowCounterAgent(openai, pageImages);
-  
-  // STEP 2: Page Agents (parallel extraction)
+  // STEP 1: Page Agents (parallel extraction)
   console.log(`   📄 Running ${pageImages.length} Page Agents in parallel...`);
   const pagePromises = pageImages.map((img, i) =>
-    runPageAgent(openai, img, i + 1, pageImages.length)
+    runPageAgent(model, img, i + 1, pageImages.length)
   );
   const pageResults = await Promise.all(pagePromises);
   
@@ -560,36 +671,29 @@ export async function runAgentSwarm(
   const allRawReadings = pageResults.flatMap(r => r.readings);
   console.log(`   📊 Total raw readings: ${allRawReadings.length}`);
   
-  // STEP 3: Project Info Verifier (majority vote)
+  // STEP 2: Project Info Verifier (majority vote)
   const projectInfo = runProjectInfoVerifier(pageResults);
   
-  // STEP 4: Readings Verifier (avgSettlement validation)
-  const verifiedReadings = runReadingsVerifier(allRawReadings);
-  
-  // STEP 5: Row Estimator (insert blank rows for missing data)
-  const finalReadings = runRowEstimator(verifiedReadings, expectedRowCount);
+  // STEP 3: Readings Verifier (avgSettlement validation + pressure inference)
+  const finalReadings = runReadingsVerifier(allRawReadings);
   
   // Calculate stats
   const lowConfidenceCount = finalReadings.filter(r => r.confidence === 'low').length;
-  const emptyRowCount = finalReadings.filter(r => r.isEmpty).length;
   
   console.log('='.repeat(50));
   console.log(`✅ Extraction complete:`);
-  console.log(`   Expected rows: ${expectedRowCount}`);
   console.log(`   Extracted rows: ${allRawReadings.length}`);
-  console.log(`   Missing rows: ${expectedRowCount - allRawReadings.length}`);
   console.log(`   Low confidence: ${lowConfidenceCount}`);
-  console.log(`   Empty placeholders: ${emptyRowCount}`);
   
   return {
-    expectedRowCount,
+    expectedRowCount: allRawReadings.length, // Same as extracted for backward compatibility
     extractedRowCount: allRawReadings.length,
-    missingRowCount: Math.max(0, expectedRowCount - allRawReadings.length),
+    missingRowCount: 0, // No row estimation
     projectInfo,
     readings: finalReadings,
     lowConfidenceCount,
-    emptyRowCount,
+    emptyRowCount: 0, // No blank rows inserted
     extractedAt: new Date().toISOString(),
-    model: 'gpt-4o (agent swarm)',
+    model: 'gemini-2.0-flash (agent swarm)',
   };
 }

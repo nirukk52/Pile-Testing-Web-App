@@ -710,3 +710,4 @@ TestStatus Flow:
 | `certificateType` | Unique per test | "Only one certificate per type allowed" |
 | `siteImages` | Max 5 per test | "Maximum 5 site images allowed" |
 
+

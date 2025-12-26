@@ -15,6 +15,7 @@ import type {
 } from '@/types';
 import { EMPTY_PROJECT_INFO } from '@/types';
 import * as api from '@/lib/api';
+import type { AgentSwarmResult } from '@/lib/ai/agent-swarm';
 
 /**
  * Main application state for pile testing.
@@ -33,6 +34,9 @@ interface TestState {
   // Current test being edited (using legacy type for UI compatibility)
   projectInfo: LegacyProjectInfo;
   loadEntries: LoadEntry[];
+
+  // Extraction result from field upload (persisted so it survives tab navigation)
+  extractionResult: AgentSwarmResult | null;
 
   // Supabase IDs for current test
   supabaseProjectId: string | null;
@@ -79,6 +83,9 @@ interface TestActions {
   setUserProfile: (profile: UserProfile) => void;
   setShowProfileModal: (show: boolean) => void;
 
+  // Extraction result persistence
+  setExtractionResult: (result: AgentSwarmResult | null) => void;
+
   // API operations - these are the real persistence
   loadTestsFromApi: () => Promise<void>;
   saveTestToApi: () => Promise<void>;
@@ -104,6 +111,7 @@ const initialState: TestState = {
   allTests: [],
   projectInfo: EMPTY_PROJECT_INFO,
   loadEntries: [],
+  extractionResult: null,
   supabaseProjectId: null,
   supabaseTestId: null,
   userProfile: {
@@ -212,6 +220,7 @@ export const useTestStore = create<TestState & TestActions>()((set, get) => ({
         testType,
       },
       loadEntries: [],
+      extractionResult: null, // Clear extraction result for new test
       supabaseProjectId: null,
       supabaseTestId: null,
       currentStep: 'upload',
@@ -272,6 +281,7 @@ export const useTestStore = create<TestState & TestActions>()((set, get) => ({
       supabaseProjectId: null,
       projectInfo: EMPTY_PROJECT_INFO,
       loadEntries: [],
+      extractionResult: null, // Clear extraction result when going home
     });
     // Refresh tests from API
     get().loadTestsFromApi();
@@ -356,6 +366,9 @@ export const useTestStore = create<TestState & TestActions>()((set, get) => ({
   // User profile
   setUserProfile: (profile) => set({ userProfile: profile }),
   setShowProfileModal: (show) => set({ showProfileModal: show }),
+
+  // Extraction result persistence
+  setExtractionResult: (result) => set({ extractionResult: result }),
 
   // API Operations - THE REAL PERSISTENCE LAYER
   loadTestsFromApi: async () => {

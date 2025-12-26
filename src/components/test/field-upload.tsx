@@ -19,15 +19,18 @@ interface FieldUploadProps {
  * Field Upload Tab - First tab for uploading field sheet PDFs.
  * Why: Runs Agent Swarm extraction to auto-fill project info and readings.
  * Big bold dropzone with submit button for easy mobile use.
+ * Extraction result is persisted in the store so it survives tab navigation.
  */
 export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadProps) {
   const [file, setFile] = useState<File | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
-  const [extractionResult, setExtractionResult] = useState<AgentSwarmResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  // Use store for extraction result persistence (survives tab navigation)
+  const extractionResult = useTestStore((s) => s.extractionResult);
+  const setExtractionResult = useTestStore((s) => s.setExtractionResult);
   const setLoadEntries = useTestStore((s) => s.setLoadEntries);
 
   /**
@@ -403,3 +406,4 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
     </div>
   );
 }
+

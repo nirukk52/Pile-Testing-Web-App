@@ -9,12 +9,25 @@ import type {
   FieldComparison,
   ReadingComparison,
   EvalConfig,
-  DEFAULT_EVAL_CONFIG 
 } from './types';
+import { DEFAULT_EVAL_CONFIG } from './types';
+
+/**
+ * Normalizes a string for comparison by removing punctuation and extra whitespace.
+ * Why: OCR often differs in punctuation (commas, periods) and whitespace.
+ */
+function normalizeForComparison(str: string): string {
+  return (str || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[.,;:'"!?()]/g, '') // Remove punctuation
+    .replace(/\s+/g, ' ');        // Normalize whitespace
+}
 
 /**
  * Compares two string values with fuzzy matching.
- * Why: Handles minor variations like "ABC Infra" vs "ABC Infrastructure".
+ * Why: Handles minor variations like "ABC Infra" vs "ABC Infrastructure",
+ * case differences, and punctuation differences from OCR.
  */
 export function compareStrings(expected: string, extracted: string): FieldComparison {
   const exp = (expected || '').trim().toLowerCase();
@@ -41,8 +54,24 @@ export function compareStrings(expected: string, extracted: string): FieldCompar
     };
   }
   
-  // Fuzzy match - check if one contains the other
-  if (exp.includes(ext) || ext.includes(exp)) {
+  // Normalize strings (remove punctuation, normalize whitespace)
+  const expNorm = normalizeForComparison(expected);
+  const extNorm = normalizeForComparison(extracted);
+  
+  // Exact match after normalization
+  if (expNorm === extNorm) {
+    return {
+      field: '',
+      expected,
+      extracted,
+      match: true,
+      matchType: 'fuzzy',
+      message: 'Match after normalization (case/punctuation)',
+    };
+  }
+  
+  // Fuzzy match - check if one contains the other (after normalization)
+  if (expNorm.includes(extNorm) || extNorm.includes(expNorm)) {
     return {
       field: '',
       expected,

@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useMemo, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Download, CheckCircle2, XCircle, AlertCircle, Loader2, FileText, Sparkles, Edit3, Save, X, RotateCcw, FileOutput } from 'lucide-react';
-import type { LoadEntry, LegacyProjectInfo } from '@/types';
+import { Download, CheckCircle2, XCircle, AlertCircle, Loader2, FileText, Sparkles, Edit3, Save, X, RotateCcw, FileOutput, Shield, ChevronDown, ChevronUp } from 'lucide-react';
+import type { LoadEntry, LegacyProjectInfo, VerificationReport } from '@/types';
+import { ScoreBadge } from '@/components/ui/score-badge';
 import { calculateAverageSettlement, TEST_TYPES } from '@/types';
 import { getTestEngine } from '@/engines';
 import type { ReadingInput, CalculationResult, TestMeta, TestType } from '@/engines';
@@ -40,6 +41,12 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
   const [isSavingConclusion, setIsSavingConclusion] = useState(false);
   const [conclusionSource, setConclusionSource] = useState<'ai' | 'template' | 'saved' | null>(null);
   const [conclusionError, setConclusionError] = useState<string | null>(null);
+
+  // Verification state
+  const [verificationReport, setVerificationReport] = useState<VerificationReport | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [showVerificationDetails, setShowVerificationDetails] = useState(false);
 
   // Get test type engine
   const testType = (projectInfo.testType as TestType) || 'IVPLT';
@@ -289,6 +296,39 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
     setIsEditingConclusion(true);
   }, [conclusion]);
 
+  /**
+   * Run verification on the test.
+   * Why: Scores the report for data integrity and IS 2911 compliance.
+   */
+  const handleVerify = useCallback(async () => {
+    if (!testId) {
+      setVerificationError('Test must be saved to database to verify');
+      return;
+    }
+
+    setIsVerifying(true);
+    setVerificationError(null);
+
+    try {
+      const response = await fetch(`/api/verify/${testId}`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Verification failed');
+      }
+
+      const report: VerificationReport = await response.json();
+      setVerificationReport(report);
+    } catch (error) {
+      console.error('Verification failed:', error);
+      setVerificationError(error instanceof Error ? error.message : 'Verification failed');
+    } finally {
+      setIsVerifying(false);
+    }
+  }, [testId]);
+
   // Prepare chart with loading and unloading curves
   useEffect(() => {
     if (!chartRef.current || readingInputs.length === 0) return;
@@ -439,6 +479,7 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
   }, [readingInputs, graphConfig]);
 
   // Format date/time for table (dd/mm/yyyy format)
+  // Uses IST (Asia/Kolkata) - all field times are in Indian Standard Time
   const formatDateTime = (timestamp: string) => {
     const date = new Date(timestamp);
     return {
@@ -446,6 +487,7 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
       time: date.toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',
+        timeZone: 'Asia/Kolkata',
       }),
     };
   };
@@ -575,6 +617,173 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
         </div>
         <StatusBadge passed={result.isPassed} />
       </div>
+
+      {/* Verification Card */}
+      {testId && (
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 print:hidden">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                <Shield className="w-5 h-5 text-indigo-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-800">Report Verification</h3>
+                <p className="text-xs text-slate-500">AI-powered quality check</p>
+              </div>
+            </div>
+            {verificationReport ? (
+              <ScoreBadge score={verificationReport.score} size="lg" />
+            ) : (
+              <button
+                onClick={handleVerify}
+                disabled={isVerifying || loadEntries.length === 0}
+                className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-medium hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+              >
+                {isVerifying ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  <>
+                    <Shield className="w-4 h-4" />
+                    Verify Report
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+
+          {verificationError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-700 text-sm mb-3">
+              {verificationError}
+            </div>
+          )}
+
+          {verificationReport && (
+            <>
+              {/* Summary */}
+              <div className={`rounded-lg p-3 mb-3 ${
+                verificationReport.status === 'pass' ? 'bg-green-50 border border-green-200' :
+                verificationReport.status === 'warn' ? 'bg-amber-50 border border-amber-200' :
+                'bg-red-50 border border-red-200'
+              }`}>
+                <p className={`text-sm ${
+                  verificationReport.status === 'pass' ? 'text-green-700' :
+                  verificationReport.status === 'warn' ? 'text-amber-700' :
+                  'text-red-700'
+                }`}>
+                  {verificationReport.summary}
+                </p>
+              </div>
+
+              {/* Check Results */}
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                <div className={`rounded-lg p-2 text-center ${
+                  verificationReport.checks.dataIntegrity.passed ? 'bg-green-50' : 'bg-red-50'
+                }`}>
+                  <p className="text-xs text-slate-500">Data Integrity</p>
+                  <p className={`text-lg font-bold ${
+                    verificationReport.checks.dataIntegrity.passed ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {verificationReport.checks.dataIntegrity.score}%
+                  </p>
+                </div>
+                <div className={`rounded-lg p-2 text-center ${
+                  verificationReport.checks.complianceIS2911.passed ? 'bg-green-50' : 'bg-red-50'
+                }`}>
+                  <p className="text-xs text-slate-500">IS 2911</p>
+                  <p className={`text-lg font-bold ${
+                    verificationReport.checks.complianceIS2911.passed ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {verificationReport.checks.complianceIS2911.score}%
+                  </p>
+                </div>
+                <div className={`rounded-lg p-2 text-center ${
+                  verificationReport.checks.visualQuality.passed ? 'bg-green-50' : 'bg-red-50'
+                }`}>
+                  <p className="text-xs text-slate-500">Quality</p>
+                  <p className={`text-lg font-bold ${
+                    verificationReport.checks.visualQuality.passed ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {verificationReport.checks.visualQuality.score}%
+                  </p>
+                </div>
+              </div>
+
+              {/* Issues List (collapsible) */}
+              {verificationReport.issues.length > 0 && (
+                <div>
+                  <button
+                    onClick={() => setShowVerificationDetails(!showVerificationDetails)}
+                    className="w-full flex items-center justify-between py-2 text-sm text-slate-600 hover:text-slate-800"
+                  >
+                    <span>{verificationReport.issues.length} issues found</span>
+                    {showVerificationDetails ? (
+                      <ChevronUp className="w-4 h-4" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4" />
+                    )}
+                  </button>
+                  {showVerificationDetails && (
+                    <div className="space-y-2 mt-2">
+                      {verificationReport.issues.map((issue) => (
+                        <div
+                          key={issue.id}
+                          className={`rounded-lg p-3 text-sm ${
+                            issue.severity === 'critical' ? 'bg-red-50 border-l-4 border-red-500' :
+                            issue.severity === 'warning' ? 'bg-amber-50 border-l-4 border-amber-500' :
+                            'bg-slate-50 border-l-4 border-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className={`font-medium ${
+                                issue.severity === 'critical' ? 'text-red-700' :
+                                issue.severity === 'warning' ? 'text-amber-700' :
+                                'text-slate-700'
+                              }`}>
+                                {issue.message}
+                              </p>
+                              {issue.location && (
+                                <p className="text-xs text-slate-500 mt-1">{issue.location}</p>
+                              )}
+                            </div>
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                              issue.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                              issue.severity === 'warning' ? 'bg-amber-100 text-amber-700' :
+                              'bg-slate-100 text-slate-600'
+                            }`}>
+                              {issue.severity}
+                            </span>
+                          </div>
+                          {issue.suggestedCorrection && (
+                            <p className="text-xs text-green-600 mt-2">
+                              💡 Suggested: {issue.suggestedCorrection}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Re-verify Button */}
+              <div className="mt-3 pt-3 border-t border-slate-100 flex justify-end">
+                <button
+                  onClick={handleVerify}
+                  disabled={isVerifying}
+                  className="text-indigo-600 hover:text-indigo-700 text-sm font-medium flex items-center gap-1"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Re-verify
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* KPI Cards Grid */}
       <section className="grid grid-cols-2 md:grid-cols-3 gap-3">

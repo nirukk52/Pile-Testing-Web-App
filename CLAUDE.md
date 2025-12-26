@@ -181,6 +181,30 @@ const passed = netSettlement <= 12; // For vertical tests
 
 ---
 
+## Timezone Convention (CRITICAL)
+
+**All times are in IST (Indian Standard Time / Asia/Kolkata)**
+
+- All projects are in India
+- Field sheets are written in IST
+- All date/time displays MUST use `timeZone: 'Asia/Kolkata'`
+- Supabase stores timestamps in UTC, but display layer converts to IST
+- Training data `expected.json` uses IST times (e.g., "11:29" not "05:59")
+
+```typescript
+// CORRECT - Always use IST for display
+date.toLocaleTimeString('en-US', {
+  hour: '2-digit',
+  minute: '2-digit',
+  timeZone: 'Asia/Kolkata',  // IST
+});
+
+// WRONG - Don't use local timezone or UTC
+date.toLocaleTimeString('en-US', { ... }); // Uses browser timezone
+```
+
+---
+
 ## UI/UX Guidelines
 
 ### Design System

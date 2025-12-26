@@ -1,50 +1,88 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# PileTest Pro Constitution
+
+> Engineering principles and non-negotiable standards for the pile load test report automation platform.
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Mobile-First & Field-Ready
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+All features MUST be usable on mobile devices in field conditions.
+- Touch targets minimum 44px
+- Input fields minimum 16px font (prevents iOS zoom)
+- Works in bright sunlight (high contrast)
+- Offline-capable where possible (localStorage fallback)
+- Fat-finger friendly forms
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### II. IS 2911 Compliance (NON-NEGOTIABLE)
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+All calculations, terminology, and report formats MUST comply with IS 2911 (Part 4) - 2013.
+- Settlement limit: ≤12mm or ≤2% pile diameter (whichever is less)
+- Test load: IVPLT = 2.5× design load, RVPLT = 1.5× design load
+- Load formula: `Load (MT) = Pressure (kg/cm²) × Ram Area (cm²) / 1000`
+- Average settlement: Mean of enabled dial gauges only
+- All dates: dd/mm/yyyy format (Indian standard)
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### III. Data Integrity First
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+Data MUST be accurate and traceable.
+- Auto-save on every change (no data loss)
+- Calculations MUST match manual IS 2911 verification 100%
+- Source files attached to reports for audit trail
+- Confidence scores for AI extractions
+- Human review required before approval
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### IV. Progressive Enhancement
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+Start simple, add complexity only when proven necessary.
+- Manual entry is the baseline (always works)
+- Ingestion auto-fills existing forms (enhancement)
+- Verification suggests corrections (enhancement)
+- Auto-correction applies only with high confidence (>90%)
+- User approval is ALWAYS required before finalizing
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### V. Extend, Don't Rebuild
+
+New features MUST integrate with existing UI and patterns.
+- Use existing components: `project-details.tsx`, `data-entry.tsx`, `report-view.tsx`
+- Use existing store: Zustand with localStorage persistence
+- Use existing patterns: kebab-case files, "why" comments, Tailwind + slate/blue palette
+- No new frameworks without explicit justification
+
+## Technology Constraints
+
+### Stack (Locked)
+- **Frontend**: Next.js 14 (App Router), TypeScript 5+, Tailwind CSS
+- **State**: Zustand with localStorage persistence
+- **Charts**: Chart.js + react-chartjs-2
+- **PDF**: Playwright for generation
+- **Storage**: Supabase (PostgreSQL + Storage)
+- **AI**: OpenAI SDK / Anthropic SDK for extraction and verification
+
+### Forbidden Without Justification
+- Additional CSS frameworks (shadcn/ui is allowed as component library)
+- Additional state management libraries
+- Client-side PDF generation libraries (use Playwright server-side)
+- Heavy UI frameworks (Material UI, Ant Design, etc.)
+
+## Quality Gates
+
+### Before Merge
+- [ ] TypeScript compiles without errors (`npx tsc --noEmit`)
+- [ ] IS 2911 calculations verified against manual calculation
+- [ ] Mobile-responsive (tested on 375px width)
+- [ ] Accessible (keyboard navigation, screen reader labels)
+
+### Before Release
+- [ ] End-to-end test: Upload → Extract → Generate → Verify → Approve
+- [ ] PDF output matches reference report structure
+- [ ] Performance: Report generation < 30 seconds
+- [ ] Data persists across sessions
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+- This constitution supersedes ad-hoc decisions
+- Amendments require explicit documentation and rationale
+- IS 2911 compliance is NEVER negotiable
+- User approval is ALWAYS required before finalizing reports
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.0 | **Ratified**: 2024-12-17 | **Last Amended**: 2024-12-17

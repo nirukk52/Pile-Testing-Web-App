@@ -1,11 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ChevronRight, Calculator, Loader2, CloudOff, Check } from 'lucide-react';
-import type { LegacyProjectInfo } from '@/types';
+import { ChevronRight, Calculator, Loader2, CloudOff, Check, AlertTriangle } from 'lucide-react';
+import type { LegacyProjectInfo, ExtractedProjectInfo } from '@/types';
 import { TEST_TYPES } from '@/types';
 import { useApiSync, useTestStore } from '@/store/test-store';
 import { convertISOToDDMMYYYY, convertDDMMYYYYToISO } from '@/lib/utils';
+
+/**
+ * Field confidence data for highlighting low-confidence extractions.
+ * Why: Maps project info fields to their confidence levels.
+ */
+export type FieldConfidenceMap = Partial<Record<keyof LegacyProjectInfo, number>>;
 
 /**
  * Props for the ProjectDetails component.
@@ -15,6 +21,38 @@ interface ProjectDetailsProps {
   projectInfo: LegacyProjectInfo;
   onUpdateField: <K extends keyof LegacyProjectInfo>(field: K, value: LegacyProjectInfo[K]) => void;
   onNext: () => void;
+  /** Optional confidence scores for fields (0-100). Fields < 80 show warnings. */
+  fieldConfidence?: FieldConfidenceMap;
+  /** List of field names that need user verification */
+  lowConfidenceFields?: string[];
+}
+
+/**
+ * Gets the warning class for a field based on confidence level.
+ * Why: Highlights low-confidence extracted fields for user review.
+ */
+function getConfidenceClass(confidence: number | undefined): string {
+  if (confidence === undefined) return '';
+  if (confidence < 50) return 'ring-2 ring-red-300 bg-red-50';
+  if (confidence < 80) return 'ring-2 ring-amber-300 bg-amber-50';
+  return '';
+}
+
+/**
+ * Warning badge shown next to low-confidence field labels.
+ * Why: Alerts users to verify extracted values that may need correction.
+ */
+function ConfidenceWarning({ confidence }: { confidence: number | undefined }) {
+  if (confidence === undefined || confidence >= 80) return null;
+  
+  return (
+    <span className={`ml-2 inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded ${
+      confidence < 50 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+    }`}>
+      <AlertTriangle className="w-3 h-3" />
+      {confidence < 50 ? 'Low conf' : 'Verify'}
+    </span>
+  );
 }
 
 /**
@@ -26,14 +64,34 @@ export function ProjectDetails({
   projectInfo,
   onUpdateField,
   onNext,
+  fieldConfidence,
+  lowConfidenceFields,
 }: ProjectDetailsProps) {
   const { saveTestToApi } = useApiSync();
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [dismissedWarning, setDismissedWarning] = useState(false);
 
   const handleChange = (field: keyof LegacyProjectInfo, value: string) => {
     onUpdateField(field, value as LegacyProjectInfo[typeof field]);
     setSaveStatus('idle'); // Reset save status when user makes changes
+  };
+
+  /**
+   * Gets confidence for a field, handling naming differences.
+   * Why: LegacyProjectInfo uses different names than ExtractedProjectInfo (e.g., mixedDesign vs concreteGrade).
+   */
+  const getFieldConfidence = (field: keyof LegacyProjectInfo): number | undefined => {
+    if (!fieldConfidence) return undefined;
+    
+    // Map legacy field names to extracted field names
+    const fieldMap: Partial<Record<keyof LegacyProjectInfo, keyof FieldConfidenceMap>> = {
+      mixedDesign: 'concreteGrade' as keyof LegacyProjectInfo,
+      designLoadOnPile: 'designLoad' as keyof LegacyProjectInfo,
+    };
+    
+    const mappedField = fieldMap[field] || field;
+    return fieldConfidence[mappedField];
   };
 
   // Get test type config for multiplier
@@ -86,12 +144,54 @@ export function ProjectDetails({
     );
   };
 
-  const inputClass =
+  const baseInputClass =
     'w-full h-12 px-4 rounded-lg border border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all text-slate-900';
   const labelClass = 'block text-xs text-slate-500 uppercase mb-1 font-medium';
 
+  /**
+   * Gets input class with confidence styling.
+   * Why: Adds visual warning for low-confidence fields.
+   */
+  const getInputClass = (field: keyof LegacyProjectInfo): string => {
+    const confidence = getFieldConfidence(field);
+    const confidenceClass = getConfidenceClass(confidence);
+    return `${baseInputClass} ${confidenceClass}`;
+  };
+
+  // Check if there are any low-confidence fields to show banner
+  const hasLowConfidenceFields = lowConfidenceFields && lowConfidenceFields.length > 0;
+
   return (
     <div className="p-4 space-y-4">
+      {/* Verification Warning Banner */}
+      {hasLowConfidenceFields && !dismissedWarning && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="text-amber-800 font-semibold text-sm">Verify Extracted Data</h3>
+              <p className="text-amber-700 text-sm mt-1">
+                Some fields were extracted with low confidence. Please review the highlighted fields below:
+              </p>
+              <ul className="text-amber-700 text-sm mt-2 space-y-1">
+                {lowConfidenceFields.map((field, i) => (
+                  <li key={i} className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-amber-500 rounded-full" />
+                    {field.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <button
+              onClick={() => setDismissedWarning(true)}
+              className="text-amber-600 hover:text-amber-800 text-sm font-medium"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Test Type Badge */}
       {projectInfo.testType && (
         <div className="bg-blue-600 text-white rounded-xl border border-blue-700 shadow-sm p-4">
@@ -118,31 +218,36 @@ export function ProjectDetails({
           <div>
             <label className={labelClass}>
               Pile ID <span className="text-rose-600">*</span>
+              <ConfidenceWarning confidence={getFieldConfidence('pileId')} />
             </label>
             <input
               type="text"
               value={projectInfo.pileId}
               onChange={(e) => handleChange('pileId', e.target.value)}
               placeholder="e.g., TP-02"
-              className={inputClass}
+              className={getInputClass('pileId')}
             />
           </div>
 
           <div>
             <label className={labelClass}>
               Report No.
+              <ConfidenceWarning confidence={getFieldConfidence('reportNo')} />
             </label>
             <input
               type="text"
               value={projectInfo.reportNo}
               onChange={(e) => handleChange('reportNo', e.target.value)}
               placeholder="e.g., IVPLT-001"
-              className={inputClass}
+              className={getInputClass('reportNo')}
             />
           </div>
 
           <div>
-            <label className={labelClass}>Test Date</label>
+            <label className={labelClass}>
+              Test Date
+              <ConfidenceWarning confidence={getFieldConfidence('testDate')} />
+            </label>
             <input
               type="text"
               value={projectInfo.testDate ? convertISOToDDMMYYYY(projectInfo.testDate) : ''}
@@ -160,12 +265,15 @@ export function ProjectDetails({
                 }
               }}
               placeholder="dd/mm/yyyy"
-              className={inputClass}
+              className={getInputClass('testDate')}
             />
           </div>
 
           <div>
-            <label className={labelClass}>Date of Casting</label>
+            <label className={labelClass}>
+              Date of Casting
+              <ConfidenceWarning confidence={getFieldConfidence('dateOfCasting')} />
+            </label>
             <input
               type="text"
               value={projectInfo.dateOfCasting ? convertISOToDDMMYYYY(projectInfo.dateOfCasting) : ''}
@@ -183,7 +291,7 @@ export function ProjectDetails({
                 }
               }}
               placeholder="dd/mm/yyyy"
-              className={inputClass}
+              className={getInputClass('dateOfCasting')}
             />
           </div>
         </div>
@@ -197,26 +305,28 @@ export function ProjectDetails({
           <div>
             <label className={labelClass}>
               Project Name <span className="text-rose-600">*</span>
+              <ConfidenceWarning confidence={getFieldConfidence('project')} />
             </label>
             <input
               type="text"
               value={projectInfo.project}
               onChange={(e) => handleChange('project', e.target.value)}
               placeholder="e.g., Sewage Management System"
-              className={inputClass}
+              className={getInputClass('project')}
             />
           </div>
 
           <div>
             <label className={labelClass}>
               Location <span className="text-rose-600">*</span>
+              <ConfidenceWarning confidence={getFieldConfidence('location')} />
             </label>
             <input
               type="text"
               value={projectInfo.location}
               onChange={(e) => handleChange('location', e.target.value)}
               placeholder="e.g., Pandhak STP 75 MLD"
-              className={inputClass}
+              className={getInputClass('location')}
             />
           </div>
 
@@ -224,13 +334,14 @@ export function ProjectDetails({
             <div>
               <label className={labelClass}>
                 Client <span className="text-rose-600">*</span>
+                <ConfidenceWarning confidence={getFieldConfidence('client')} />
               </label>
               <input
                 type="text"
                 value={projectInfo.client}
                 onChange={(e) => handleChange('client', e.target.value)}
                 placeholder="e.g., NMC"
-                className={inputClass}
+                className={getInputClass('client')}
               />
             </div>
 
@@ -241,7 +352,7 @@ export function ProjectDetails({
                 value={projectInfo.pmc}
                 onChange={(e) => handleChange('pmc', e.target.value)}
                 placeholder="(Optional)"
-                className={inputClass}
+                className={baseInputClass}
               />
             </div>
           </div>
@@ -249,13 +360,14 @@ export function ProjectDetails({
           <div>
             <label className={labelClass}>
               Contractor <span className="text-rose-600">*</span>
+              <ConfidenceWarning confidence={getFieldConfidence('contractor')} />
             </label>
             <input
               type="text"
               value={projectInfo.contractor}
               onChange={(e) => handleChange('contractor', e.target.value)}
               placeholder="e.g., KUMBH W. W.MANAGEMENT PVT.LTD."
-              className={inputClass}
+              className={getInputClass('contractor')}
             />
           </div>
         </div>
@@ -269,42 +381,50 @@ export function ProjectDetails({
           <div>
             <label className={labelClass}>
               Pile Diameter (mm) <span className="text-rose-600">*</span>
+              <ConfidenceWarning confidence={getFieldConfidence('pileDiameter')} />
             </label>
             <input
               type="number"
               value={projectInfo.pileDiameter}
               onChange={(e) => handleChange('pileDiameter', e.target.value)}
               placeholder="600"
-              className={inputClass}
+              className={getInputClass('pileDiameter')}
             />
           </div>
 
           <div>
-            <label className={labelClass}>Pile Depth (m)</label>
+            <label className={labelClass}>
+              Pile Depth (m)
+              <ConfidenceWarning confidence={getFieldConfidence('pileDepth')} />
+            </label>
             <input
               type="number"
               step="0.01"
               value={projectInfo.pileDepth}
               onChange={(e) => handleChange('pileDepth', e.target.value)}
               placeholder="10.31"
-              className={inputClass}
+              className={getInputClass('pileDepth')}
             />
           </div>
 
           <div>
-            <label className={labelClass}>Concrete Grade</label>
+            <label className={labelClass}>
+              Concrete Grade
+              <ConfidenceWarning confidence={getFieldConfidence('mixedDesign')} />
+            </label>
             <input
               type="text"
               value={projectInfo.mixedDesign}
               onChange={(e) => handleChange('mixedDesign', e.target.value)}
               placeholder="M25"
-              className={inputClass}
+              className={getInputClass('mixedDesign')}
             />
           </div>
 
           <div>
             <label className={labelClass}>
               Design Load (MT) <span className="text-rose-600">*</span>
+              <ConfidenceWarning confidence={getFieldConfidence('designLoadOnPile')} />
             </label>
             <input
               type="number"
@@ -312,7 +432,7 @@ export function ProjectDetails({
               value={projectInfo.designLoadOnPile}
               onChange={(e) => handleChange('designLoadOnPile', e.target.value)}
               placeholder="147"
-              className={inputClass}
+              className={getInputClass('designLoadOnPile')}
             />
           </div>
         </div>
@@ -341,6 +461,7 @@ export function ProjectDetails({
           <div>
             <label className={labelClass}>
               Ram Area (cm²) <span className="text-rose-600">*</span>
+              <ConfidenceWarning confidence={getFieldConfidence('ramArea')} />
             </label>
             <input
               type="number"
@@ -348,7 +469,7 @@ export function ProjectDetails({
               value={projectInfo.ramArea}
               onChange={(e) => handleChange('ramArea', e.target.value)}
               placeholder="71.26"
-              className={inputClass}
+              className={getInputClass('ramArea')}
             />
             <p className="text-xs text-slate-500 mt-1">
               Required to calculate load from pressure
@@ -363,7 +484,7 @@ export function ProjectDetails({
               value={projectInfo.lcOfDialGauge}
               onChange={(e) => handleChange('lcOfDialGauge', e.target.value)}
               placeholder="0.01"
-              className={inputClass}
+              className={baseInputClass}
             />
           </div>
 
@@ -374,7 +495,7 @@ export function ProjectDetails({
               value={projectInfo.jackName}
               onChange={(e) => handleChange('jackName', e.target.value)}
               placeholder="e.g., Jack Serial No. / Make"
-              className={inputClass}
+              className={baseInputClass}
             />
           </div>
         </div>

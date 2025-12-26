@@ -99,9 +99,9 @@ async function main() {
     process.exit(1);
   }
   
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    process.stderr.write('OPENAI_API_KEY not configured\n');
+    process.stderr.write('GOOGLE_API_KEY or GEMINI_API_KEY not configured\n');
     process.exit(1);
   }
   
