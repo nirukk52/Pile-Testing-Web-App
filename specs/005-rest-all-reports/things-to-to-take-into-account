@@ -1,0 +1,215 @@
+Below is a **clean, exhaustive, implementation-ready delta list** you should follow.
+This is **ONLY differences vs IVPLT** — nothing repeated.
+
+---
+
+## 1️⃣ Fundamental Nature
+
+**IVPLT**
+
+* Vertical **compression**
+* Measures **settlement (downward)**
+
+**RVPLT**
+
+* Vertical **compression**
+* Measures **settlement (downward)**
+
+**Lateral**
+
+* **Horizontal** load
+* Measures **lateral deflection**
+
+**Uplift / Pull-out**
+
+* Vertical **tension**
+* Measures **upward movement**
+
+---
+
+## 2️⃣ Governing IS Code Clauses
+
+* **IVPLT** → IS 2911 Part 4, Clause **7.1.5**
+* **RVPLT** → IS 2911 Part 4, Clause **7.1.5.1**
+* **Lateral** → IS 2911 Part 4, Clause **8.4 / 8.4.1**
+* **Uplift** → IS 2911 Part 4, Clause **9.4**
+
+---
+
+## 3️⃣ Test Load Multiplier (CRITICAL)
+
+| Test Type             | Test Load vs Design                       |
+| --------------------- | ----------------------------------------- |
+| **IVPLT**             | **2.5 ×** design load                     |
+| **RVPLT**             | **1.5 ×** design load                     |
+| **Lateral – Initial** | **2.5 ×** design lateral load             |
+| **Lateral – Routine** | **1.0 ×** design lateral load *(default)* |
+| **Uplift**            | **2.5 ×** design uplift load              |
+
+---
+
+## 4️⃣ Acceptance / Failure Criterion
+
+### IVPLT
+
+Safe load = **LESSER of**
+
+* **⅔ × load at 12 mm settlement**
+* **½ × load at 10% pile dia settlement**
+
+---
+
+### RVPLT
+
+No “safe load calc”. **PASS / FAIL only**
+
+Settlement at **1.5× load must be ≤**
+
+* **12 mm** → pile dia ≤ 600 mm
+* **18 mm OR 2% dia (whichever less)** → dia > 600 mm
+
+---
+
+### Lateral
+
+Safe lateral load = **LEAST of**
+
+* Load at **5 mm lateral deflection**
+* **½ × load at 12 mm deflection** *(if reached)*
+
+Most reports only use **5 mm rule**
+
+---
+
+### Uplift
+
+Safe uplift load = **LEAST of**
+
+* **⅔ × load at 12 mm uplift**
+* **½ × load at yield / break point** *(manual if visible)*
+
+---
+
+## 5️⃣ Direction of Dial Gauge Reading
+
+| Test    | Movement   |
+| ------- | ---------- |
+| IVPLT   | Downward   |
+| RVPLT   | Downward   |
+| Lateral | Horizontal |
+| Uplift  | Upward     |
+
+---
+
+## 6️⃣ Reaction System
+
+| Test    | Reaction                                    |
+| ------- | ------------------------------------------- |
+| IVPLT   | Kentledge / Anchor piles                    |
+| RVPLT   | Kentledge / Anchor piles                    |
+| Lateral | **Reaction pile / frame (horizontal jack)** |
+| Uplift  | **Anchor pile + tension jack**              |
+
+---
+
+## 7️⃣ Dial Gauge Configuration
+
+| Test    | Gauges                                  |
+| ------- | --------------------------------------- |
+| IVPLT   | 3–4 gauges on pile head                 |
+| RVPLT   | 3–4 gauges on pile head                 |
+| Lateral | **2 on test pile + 2 on reaction pile** |
+| Uplift  | 2–4 gauges measuring uplift             |
+
+⚠️ **Lateral requires NET deflection = test pile − reaction pile**
+
+---
+
+## 8️⃣ Load Holding Logic
+
+| Test    | Holding                                     |
+| ------- | ------------------------------------------- |
+| IVPLT   | Long holds + **24-hr creep often required** |
+| RVPLT   | 30–60 min holds                             |
+| Lateral | Hold until **rate < 0.1 mm / 30 min**       |
+| Uplift  | Similar to IVPLT but no 24-hr usually       |
+
+---
+
+## 9️⃣ Graph Type
+
+| Test    | Graph                           |
+| ------- | ------------------------------- |
+| IVPLT   | Load vs **Settlement**          |
+| RVPLT   | Load vs **Settlement**          |
+| Lateral | Load vs **Lateral deflection**  |
+| Uplift  | Load vs **Uplift displacement** |
+
+Special markers:
+
+* IVPLT → 12 mm & 10% dia
+* RVPLT → 12 / 18 mm
+* Lateral → **5 mm**
+* Uplift → **12 mm + yield**
+
+---
+
+## 🔟 Conclusion Language (Must Change)
+
+**IVPLT**
+
+> “…pile has shown more load carrying capacity than design load… adopted as safe vertical load…”
+
+**RVPLT**
+
+> “…settlement is within permissible limits… pile is satisfactory for working load…”
+
+**Lateral**
+
+> “…deflection within 5 mm even at test load… design lateral load is safe…”
+
+**Uplift**
+
+> “…uplift displacement within permissible limits… design uplift load is safe…”
+
+---
+
+## 1️⃣1️⃣ Calculation Differences Summary
+
+| Item                 | IVPLT   | RVPLT | Lateral            | Uplift |
+| -------------------- | ------- | ----- | ------------------ | ------ |
+| Interpolation needed | ✅       | ❌     | ✅ (5 mm)           | ✅      |
+| Yield detection      | ❌       | ❌     | ❌                  | ✅      |
+| Net settlement       | ✅       | ✅     | ✅ (minus reaction) | ✅      |
+| Safety factor math   | Complex | None  | Simple             | Medium |
+
+---
+
+## 1️⃣2️⃣ MVP Flags Your Agent MUST Add
+
+* `testType`: IVPLT / RVPLT / LATERAL / UPLIFT
+* `direction`: compression / lateral / tension
+* `governingLimit`: 12mm / 18mm / 5mm / yield
+* `reactionCorrectionRequired`: **true only for lateral**
+* `safeLoadFormulaType`: enum-driven
+* `passFailOnly`: **true for RVPLT**
+
+---
+
+### That’s the **complete delta list**.
+
+If your agent implements all of this, reports will be **IS-2911 defensible** and audit-proof.
+
+---
+
+**Q1**
+
+What edge cases in lateral and uplift tests typically break automated calculations?
+
+**Q2**
+
+How should interpolation behave if 5 mm or 12 mm is never reached in field data?
+
+**Q3**
+
+Which of these test types gives the most commercial differentiation for my SaaS if automated perfectly?

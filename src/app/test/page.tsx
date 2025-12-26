@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, FileText, ClipboardList, Eye, User, Image, FileCheck } from 'lucide-react';
-import { ProjectDetails, DataEntry, ReportView, SiteImages, Certificates } from '@/components/test';
+import { ArrowLeft, FileText, ClipboardList, Eye, User, Image, FileCheck, Upload } from 'lucide-react';
+import { FieldUpload, ProjectDetails, DataEntry, ReportView, SiteImages, Certificates } from '@/components/test';
 import { ProfileModal } from '@/components/home';
 import { useTestStore } from '@/store/test-store';
 import type { WorkflowStep, LoadEntry } from '@/types';
@@ -73,11 +73,12 @@ export default function TestPage() {
   }
 
   const tabs: Array<{ key: WorkflowStep; label: string; icon: typeof FileText }> = [
+    { key: 'upload', label: 'Upload', icon: Upload },
     { key: 'details', label: 'Details', icon: FileText },
-    { key: 'entry', label: 'Data Entry', icon: ClipboardList },
+    { key: 'entry', label: 'Data', icon: ClipboardList },
     { key: 'images', label: 'Images', icon: Image },
     { key: 'certificates', label: 'Certs', icon: FileCheck },
-    { key: 'report', label: 'Summary', icon: Eye },
+    { key: 'report', label: 'Report', icon: Eye },
   ];
 
   return (
@@ -126,6 +127,13 @@ export default function TestPage() {
 
       {/* Main Content */}
       <main className="pb-20">
+        {currentStep === 'upload' && (
+          <FieldUpload
+            projectInfo={projectInfo}
+            onUpdateField={updateProjectField}
+            onNext={() => setCurrentStep('details')}
+          />
+        )}
         {currentStep === 'details' && (
           <ProjectDetails
             projectInfo={projectInfo}

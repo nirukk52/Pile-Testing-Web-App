@@ -1,0 +1,413 @@
+openapi: 3.0.3
+info:
+  title: PileTest Pro - Auto Report Pipeline API
+  description: API endpoints for file ingestion, verification, and correction
+  version: 1.0.0
+
+servers:
+  - url: /api
+    description: Next.js API routes
+
+paths:
+  /ingest:
+    post:
+      summary: Upload and ingest a file
+      description: Accepts file upload, creates IngestionJob, starts extraction
+      operationId: createIngestionJob
+      tags:
+        - Ingestion
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: PDF, Excel, CSV, DOCX, or image file
+                testType:
+                  type: string
+                  enum: [IVPLT, RVPLT, Lateral, Uplift]
+                  default: IVPLT
+      responses:
+        '201':
+          description: Ingestion job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestionJob'
+        '400':
+          description: Invalid file type or size
+        '500':
+          description: Extraction failed
+
+  /ingest/{jobId}:
+    get:
+      summary: Get ingestion job status
+      operationId: getIngestionJob
+      tags:
+        - Ingestion
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ingestion job details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestionJob'
+        '404':
+          description: Job not found
+
+  /ingest/{jobId}/confirm:
+    post:
+      summary: Confirm extracted data and create test
+      description: User confirms (and optionally edits) extracted data, creates SavedTest
+      operationId: confirmExtraction
+      tags:
+        - Ingestion
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                projectInfo:
+                  $ref: '#/components/schemas/ProjectInfo'
+                readings:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Reading'
+      responses:
+        '201':
+          description: Test created from extraction
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  testId:
+                    type: string
+                  message:
+                    type: string
+
+  /verify/{testId}:
+    post:
+      summary: Run verification on a test report
+      description: Generates report if needed, runs verification checks, returns score
+      operationId: verifyReport
+      tags:
+        - Verification
+      parameters:
+        - name: testId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Verification report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationReport'
+        '404':
+          description: Test not found
+
+    get:
+      summary: Get latest verification report
+      operationId: getVerificationReport
+      tags:
+        - Verification
+      parameters:
+        - name: testId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Latest verification report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationReport'
+
+  /verify/{testId}/correct:
+    post:
+      summary: Apply corrections and re-verify
+      description: Applies suggested corrections, re-generates report, re-verifies
+      operationId: applyCorrections
+      tags:
+        - Verification
+      parameters:
+        - name: testId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                corrections:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      issueId:
+                        type: string
+                      accept:
+                        type: boolean
+                      customValue:
+                        type: string
+      responses:
+        '200':
+          description: Corrections applied, new verification report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationReport'
+
+  /tests/{testId}/approve:
+    post:
+      summary: Approve a verified report
+      description: Marks report as approved, locks for editing
+      operationId: approveReport
+      tags:
+        - Approval
+      parameters:
+        - name: testId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Report approved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  testId:
+                    type: string
+                  status:
+                    type: string
+                    enum: [approved]
+                  approvedAt:
+                    type: string
+                    format: date-time
+
+components:
+  schemas:
+    IngestionJob:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        testId:
+          type: string
+          format: uuid
+          nullable: true
+        fileName:
+          type: string
+        fileType:
+          type: string
+          enum: [pdf, xlsx, csv, docx, image]
+        fileUrl:
+          type: string
+          format: uri
+        status:
+          type: string
+          enum: [pending, extracting, review, completed, failed]
+        extractionMethod:
+          type: string
+          enum: [excel, pdf-text, pdf-table, vision]
+        extractedProjectInfo:
+          $ref: '#/components/schemas/ProjectInfo'
+        extractedReadings:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExtractedReading'
+        overallConfidence:
+          type: number
+          minimum: 0
+          maximum: 100
+        lowConfidenceFields:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    ProjectInfo:
+      type: object
+      properties:
+        pileId:
+          type: string
+        reportNo:
+          type: string
+        project:
+          type: string
+        location:
+          type: string
+        client:
+          type: string
+        contractor:
+          type: string
+        pileDiameter:
+          type: string
+        pileDepth:
+          type: string
+        designLoadOnPile:
+          type: string
+        ramArea:
+          type: string
+        testType:
+          type: string
+          enum: [IVPLT, RVPLT, Lateral, Uplift]
+
+    Reading:
+      type: object
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+        pressureGauge:
+          type: string
+        dialGauge1:
+          type: string
+        dialGauge2:
+          type: string
+        dialGauge3:
+          type: string
+        dialGauge4:
+          type: string
+        phase:
+          type: string
+          enum: [loading, holding, unloading]
+        remark:
+          type: string
+
+    ExtractedReading:
+      type: object
+      properties:
+        rowIndex:
+          type: integer
+        pressureGauge:
+          $ref: '#/components/schemas/ValueWithConfidence'
+        dialGauge1:
+          $ref: '#/components/schemas/ValueWithConfidence'
+        dialGauge2:
+          $ref: '#/components/schemas/ValueWithConfidence'
+        dialGauge3:
+          $ref: '#/components/schemas/ValueWithConfidence'
+        dialGauge4:
+          $ref: '#/components/schemas/ValueWithConfidence'
+        phase:
+          $ref: '#/components/schemas/ValueWithConfidence'
+
+    ValueWithConfidence:
+      type: object
+      properties:
+        value:
+          type: string
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 100
+
+    VerificationReport:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        testId:
+          type: string
+          format: uuid
+        reportVersion:
+          type: integer
+        score:
+          type: number
+          minimum: 0
+          maximum: 100
+        status:
+          type: string
+          enum: [pass, warn, fail]
+        checks:
+          type: object
+          properties:
+            dataIntegrity:
+              $ref: '#/components/schemas/CheckResult'
+            complianceIS2911:
+              $ref: '#/components/schemas/CheckResult'
+            visualQuality:
+              $ref: '#/components/schemas/CheckResult'
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/VerificationIssue'
+        summary:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    CheckResult:
+      type: object
+      properties:
+        passed:
+          type: boolean
+        score:
+          type: number
+        details:
+          type: string
+
+    VerificationIssue:
+      type: object
+      properties:
+        id:
+          type: string
+        severity:
+          type: string
+          enum: [critical, warning, info]
+        category:
+          type: string
+          enum: [data, compliance, formatting]
+        message:
+          type: string
+        location:
+          type: string
+        suggestedCorrection:
+          type: string
+        correctionConfidence:
+          type: number
+

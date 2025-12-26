@@ -6,14 +6,15 @@
 
 ## Project Overview
 
-**PileTest Pro** is a mobile-first web app for site engineers to record pile load test readings and generate IS 2911-compliant reports. Engineers enter data directly on-site using their mobile devices.
+**PileTest Pro** is a mobile-first web app for site engineers to record pile load test readings and generate IS 2911-compliant reports.
 
-### Core Flow (MVP)
-```
-Home (test list) → Select Test Type → Enter Details → Add Readings → View Report → Export PDF
-```
+**Current Phase**: **Intelligent Ingestion & Verification**
+We are expanding from manual entry to automated data ingestion from various file formats (PDF, Excel, Word) and implementing an AI-powered verification agent to ensure report accuracy.
 
-**Note**: OCR-based workflow is archived in `src/_archive/` for future use. Current MVP uses manual data entry.
+### Core Flow
+```
+Landing Page → Select/Upload Data (PDF/Excel/Manual) → Automated Extraction → Review/Edit → Generate Report → AI Verification → Export PDF
+```
 
 ---
 
@@ -25,15 +26,16 @@ Home (test list) → Select Test Type → Enter Details → Add Readings → Vie
 | Language | TypeScript | 5+ | Type safety throughout |
 | Styling | Tailwind CSS | 3.4+ | Utility-first CSS, mobile-first design |
 | Charts | Chart.js + react-chartjs-2 | 4+ | Load vs Settlement curves |
-| State | Zustand | 4+ | Lightweight client state management |
-| Persistence | localStorage | - | Browser storage for MVP |
+| State | Zustand | 4+ | Client state management |
+| Persistence | localStorage / Supabase | - | Browser storage (MVP) / Cloud (Future) |
 | Icons | Lucide React | latest | Consistent icon set |
+| Agents | OpenAI / Anthropic SDKs | - | Data extraction and verification agents |
 
 ### Why These Choices
 
-- **Zustand + localStorage**: Simple persistence without backend complexity for MVP
-- **Mobile-first**: Site engineers use phones in the field
-- **No OCR for MVP**: Direct entry is faster to ship and more reliable
+- **Zustand + localStorage**: Simple persistence for offline-first capability.
+- **AI Agents**: To handle unstructured data ingestion (field notes, legacy reports) and automated QA.
+- **Mobile-first**: Site engineers use phones in the field.
 
 ---
 
@@ -42,46 +44,49 @@ Home (test list) → Select Test Type → Enter Details → Add Readings → Vie
 ```
 src/
 ├── app/
-│   ├── layout.tsx              # Root layout
-│   ├── page.tsx                # Home screen (test list)
-│   └── test/
-│       └── page.tsx            # Test workspace with tab navigation
+│ ├── layout.tsx # Root layout
+│ ├── page.tsx # Landing Page (New)
+│ ├── home/
+│ │ └── page.tsx # Dashboard (Test List)
+│ └── test/
+│ └── page.tsx # Test workspace with tab navigation
 │
 ├── components/
-│   ├── home/
-│   │   ├── home-screen.tsx     # Test list + "Start New Test" button
-│   │   ├── test-type-modal.tsx # IVPLT/RVPLT/Lateral/Uplift selection
-│   │   ├── profile-modal.tsx   # User profile for signatures
-│   │   └── index.ts
-│   └── test/
-│       ├── project-details.tsx # Project info + pile specs form
-│       ├── data-entry.tsx      # Timeline table of readings
-│       ├── add-reading-page.tsx# Full-page form for single reading
-│       ├── report-view.tsx     # KPIs, chart, specs, data table
-│       └── index.ts
+│ ├── landing/ # Landing page components
+│ ├── ingestion/ # File upload & extraction UI
+│ ├── verification/ # AI Verification results UI
+│ ├── home/
+│ │ ├── home-screen.tsx # Test list + "Start New Test" button
+│ │ ├── test-type-modal.tsx # IVPLT/RVPLT/Lateral/Uplift selection
+│ │ ├── profile-modal.tsx # User profile for signatures
+│ │ └── index.ts
+│ └── test/
+│ ├── project-details.tsx # Project info + pile specs form
+│ ├── data-entry.tsx # Timeline table of readings
+│ ├── add-reading-page.tsx# Full-page form for single reading
+│ ├── report-view.tsx # KPIs, chart, specs, data table
+│ └── index.ts
 │
 ├── store/
-│   └── test-store.ts           # Zustand store with localStorage persistence
+│ └── test-store.ts # Zustand store
 │
 ├── types/
-│   └── index.ts                # TypeScript interfaces + calculation helpers
+│ └── index.ts # TypeScript interfaces + calculation helpers
 │
 ├── lib/
-│   ├── utils.ts                # General utilities (cn, etc.)
-│   ├── ai/
-│   │   ├── conclusion-agent.ts # AI conclusion generation via @openai/agents
-│   │   └── index.ts            # Barrel export
-│   └── pdf/
-│       ├── generator.ts        # Playwright PDF generation
-│       └── templates/          # HTML templates for PDF
+│ ├── utils.ts # General utilities (cn, etc.)
+│ ├── ai/
+│ │ ├── extraction-agent.ts # Agent for parsing uploaded files
+│ │ ├── verification-agent.ts # Agent for verifying PDF reports
+│ │ └── index.ts
+│ └── pdf/
+│ ├── generator.ts # Playwright PDF generation
+│ └── templates/ # HTML templates for PDF
 │
 ├── styles/
-│   └── globals.css             # Tailwind directives + custom styles
+│ └── globals.css # Tailwind directives + custom styles
 │
-└── _archive/                   # Archived OCR workflow (for future use)
-    ├── app/                    # Old verify, report pages
-    ├── components/             # Old upload, verify, report components
-    └── lib/                    # OCR API, calculations, PDF generation
+└── _archive/ # Archived OCR workflow
 ```
 
 ---
@@ -107,8 +112,8 @@ import type { ProjectInfo } from '@/types';
  * Why: Defines the data and callbacks needed from parent.
  */
 interface MyComponentProps {
-  data: ProjectInfo;
-  onSave: (data: ProjectInfo) => void;
+ data: ProjectInfo;
+ onSave: (data: ProjectInfo) => void;
 }
 
 /**
@@ -116,24 +121,12 @@ interface MyComponentProps {
  * Why: Explains the purpose in the overall workflow.
  */
 export function MyComponent({ data, onSave }: MyComponentProps) {
-  // Component logic
+ // Component logic
 }
 ```
 
 ### Documentation Rule
-Every class, enum, interface, and exported function MUST have a comment explaining **why it exists**:
-
-```tsx
-/**
- * A single reading captured during the pile load test.
- * Why: Represents one time-stamped measurement with pressure and dial gauge readings.
- */
-export interface Reading {
-  id: string;
-  pressureGauge: string;
-  // ...
-}
-```
+Every class, enum, interface, and exported function MUST have a comment explaining **why it exists**.
 
 ### State Management
 - Use **Zustand** for global app state
@@ -142,23 +135,23 @@ export interface Reading {
 
 ```tsx
 interface TestState {
-  // Navigation
-  view: 'home' | 'test';
-  currentStep: 'details' | 'entry' | 'report';
-  currentTestId: string | null;
-  
-  // Data
-  allTests: SavedTest[];
-  projectInfo: ProjectInfo;
-  loadEntries: LoadEntry[];
-  userProfile: UserProfile;
-  
-  // Actions
-  createNewTest: (testType: TestType) => void;
-  openTest: (testId: string) => void;
-  updateProjectField: (field, value) => void;
-  addLoadEntry: (entry: LoadEntry) => void;
-  // ...
+ // Navigation
+ view: 'landing' | 'home' | 'test';
+ currentStep: 'details' | 'entry' | 'report';
+ currentTestId: string | null;
+ 
+ // Data
+ allTests: SavedTest[];
+ projectInfo: ProjectInfo;
+ loadEntries: LoadEntry[];
+ userProfile: UserProfile;
+ 
+ // Actions
+ createNewTest: (testType: TestType) => void;
+ openTest: (testId: string) => void;
+ updateProjectField: (field, value) => void;
+ addLoadEntry: (entry: LoadEntry) => void;
+ // ...
 }
 ```
 
@@ -186,10 +179,29 @@ const avgSettlement = (g1 + g2 + g3 + g4) / 4; // mm
 const passed = netSettlement <= 12; // For vertical tests
 ```
 
-These are implemented in `src/types/index.ts`:
-- `calculateLoad(pressure, ramArea)`
-- `calculateAverageSettlement(g1, g2, g3, g4)`
-- `SETTLEMENT_LIMIT_MM = 12`
+---
+
+## Timezone Convention (CRITICAL)
+
+**All times are in IST (Indian Standard Time / Asia/Kolkata)**
+
+- All projects are in India
+- Field sheets are written in IST
+- All date/time displays MUST use `timeZone: 'Asia/Kolkata'`
+- Supabase stores timestamps in UTC, but display layer converts to IST
+- Training data `expected.json` uses IST times (e.g., "11:29" not "05:59")
+
+```typescript
+// CORRECT - Always use IST for display
+date.toLocaleTimeString('en-US', {
+  hour: '2-digit',
+  minute: '2-digit',
+  timeZone: 'Asia/Kolkata',  // IST
+});
+
+// WRONG - Don't use local timezone or UTC
+date.toLocaleTimeString('en-US', { ... }); // Uses browser timezone
+```
 
 ---
 
@@ -199,87 +211,53 @@ These are implemented in `src/types/index.ts`:
 - Mobile-first approach (site engineers use phones)
 - Follow the Figma design in `figma/Mobile App for Site Engineers/`
 - Color palette (from `DESIGN_SYSTEM.md`):
-  ```css
-  --primary: #2563eb;     /* Blue - actions, active tabs */
-  --success: #10b981;     /* Green - pass status, unloading */
-  --warning: #f59e0b;     /* Amber - holding phase */
-  --destructive: #ef4444; /* Red - fail status, delete */
-  --slate-800: #1e293b;   /* Midnight Slate - headers */
-  ```
-
-### Screen Layouts
-
-**Home Screen**
-- Slate header with app branding
-- "Start New Pile Test" button (prominent blue)
-- Recent tests list with cards
-- Profile button in header
-
-**Test Workspace** (tab navigation)
-- **Details Tab**: Project info + pile specs forms
-- **Data Entry Tab**: Timeline table + "Add Reading" button
-- **Report Tab**: KPIs, chart, specs panel, data table
-
-**Add Reading Page** (full-screen modal)
-- Date & Time (auto-filled)
-- Pressure & Load (with calculated preview)
-- 4 Dial Gauge inputs (2x2 grid)
-- Phase selector (Loading/Holding/Unloading)
-- Remark (optional)
-- Signature input
-- Slide-to-confirm button
+ ```css
+ --primary: #2563eb; /* Blue - actions, active tabs */
+ --success: #10b981; /* Green - pass status, unloading */
+ --warning: #f59e0b; /* Amber - holding phase */
+ --destructive: #ef4444; /* Red - fail status, delete */
+ --slate-800: #1e293b; /* Midnight Slate - headers */
+ ```
 
 ---
 
-## Date Format Standards
+## Roadmap
 
-**Why**: Ensures consistency across the app per IS 2911 compliance and site engineer expectations.
+- [x] **Phase 1**: Manual data entry MVP
+- [ ] **Phase 2**: Intelligent Ingestion & Verification
+  - [ ] Universal File Upload (PDF/Excel/Word/Images)
+  - [ ] AI Extraction Agent
+  - [ ] AI Verification Agent (Report vs Data)
+  - [ ] Landing Page
+- [ ] **Phase 2.5**: Vision Training Pipeline (003-vision-training-pipeline)
+  - [ ] Handwritten field sheet → Vision API extraction
+  - [ ] Eval framework (80% accuracy target)
+  - [ ] Report generation comparison
+  - [ ] Iterative improvement loop
+- [ ] **Phase 3**: Cloud Database & Auth (Supabase)
+- [ ] **Phase 4**: Advanced Geotech Agents (Foundation Sizing, Seismic)
 
-### Standard Format: dd/mm/yyyy
-All date displays throughout the app MUST use `dd/mm/yyyy` format (e.g., `15/01/2024`):
-- Home screen (test list)
-- Project details page
-- Data entry table
-- Add reading page
-- Report page data table
+---
 
-### Exception: Report Headers
-Report headers and PDF exports MAY use long format for better readability:
-- Format: `15 January 2024`
-- Used in: Report view header, PDF exports, print view
+## Training & Eval System
 
-### Implementation
-Use utility functions from `src/lib/utils.ts`:
-```typescript
-import { formatDateDDMMYYYY, formatDateLong, convertDDMMYYYYToISO, convertISOToDDMMYYYY, isValidDDMMYYYY } from '@/lib/utils';
-
-// Standard display (dd/mm/yyyy)
-const dateStr = formatDateDDMMYYYY(new Date());  // "15/01/2024"
-const dateStr2 = formatDateDDMMYYYY(isoString);  // "15/01/2024"
-
-// Report headers only (long format)
-const reportDate = formatDateLong(new Date());   // "15 January 2024"
-
-// For text inputs: Convert between formats
-const isoDate = convertDDMMYYYYToISO('15/01/2024');  // "2024-01-15"
-const displayDate = convertISOToDDMMYYYY('2024-01-15');  // "15/01/2024"
-
-// Validate user input
-const isValid = isValidDDMMYYYY('15/01/2024');  // true
+### Training Data Structure
+```
+training-data/
+  report-001/
+    field-sheet/    # Handwritten PDFs (input)
+    og-report/      # Verified reports (reference)
+    expected.json   # Ground truth from Supabase
 ```
 
-### Date Input Fields
-All date input fields use `<input type="text">` with dd/mm/yyyy format enforcement:
-- Placeholder shows "dd/mm/yyyy"
-- Validates format as user types
-- Converts to ISO format for storage
-- Displays in dd/mm/yyyy format
-- This avoids browser-dependent date picker formatting
+### Eval Commands
+```bash
+npm run eval:pull report-001    # Pull expected.json from Supabase
+npm run eval:extract report-001 # Run Vision extraction + compare
+npm run eval:all                # Run all evals
+```
 
-### Database Storage
-- Prisma uses `DateTime` type → stored as ISO 8601 in PostgreSQL
-- JavaScript/TypeScript uses `Date` objects or ISO strings internally
-- Only convert to dd/mm/yyyy at display time
+### Target: 80% extraction accuracy before moving to report generation
 
 ---
 
@@ -299,86 +277,10 @@ npm run build
 npx tsc --noEmit
 ```
 
----
-
-## MVP Scope
-
-### In Scope
-- [x] Home screen with test list
-- [x] Test type selection (IVPLT, RVPLT, Lateral, Uplift)
-- [x] Project details form
-- [x] Data entry with timeline table
-- [x] Add reading page with all fields
-- [x] Phase tracking (loading/holding/unloading)
-- [x] Report view with KPIs and chart
-- [x] localStorage persistence
-- [x] User profile for signatures
-- [ ] PDF export (use window.print() for now)
-
-### Out of Scope (Future)
-- [ ] OCR extraction (archived in `_archive/`)
-- [ ] Cloud database (Supabase)
-- [ ] User authentication
-- [ ] Multi-user roles
-- [ ] Approval workflows
-- [ ] Native mobile app
-
----
-
-## Reference Files
-
-| File | Use For |
-|------|---------|
-| `project_info_and_context/report.html` | Target UI design (SSOT for Report view) |
-| `project_info_and_context/these-are-the-reports-to-automate/` | PDF output reference |
-| `figma/Mobile App for Site Engineers/` | Figma export (gitignored) |
-| `figma/Mobile App for Site Engineers/src/DESIGN_SYSTEM.md` | Color palette, typography |
-
----
-
-## Error Handling
-
-- Wrap async operations in try/catch
-- Use browser's `confirm()` for destructive actions (delete)
-- Auto-save to localStorage on every change
-- Graceful hydration handling (show spinner until mounted)
-
-```tsx
-// Hydration pattern for client components
-const [mounted, setMounted] = useState(false);
-
-useEffect(() => {
-  setMounted(true);
-}, []);
-
-if (!mounted) {
-  return <LoadingSpinner />;
-}
-```
-
----
-
-## Archived Code
-
-The `src/_archive/` folder contains the original OCR-based workflow:
-
-| Path | Contents |
-|------|----------|
-| `_archive/app/verify/` | OCR verification page |
-| `_archive/app/report/` | Old report page |
-| `_archive/components/upload/` | Dropzone, test-type-select |
-| `_archive/components/verify/` | OCR table, confidence cells |
-| `_archive/components/report/` | Old report components |
-| `_archive/lib/ocr-api.ts` | OCR API integration |
-| `_archive/lib/calculations/` | Old calculation helpers |
-| `_archive/lib/pdf/` | Playwright PDF generation |
-
-This code is excluded from TypeScript compilation via `tsconfig.json`.
-
 ## Active Technologies
-- TypeScript 5+, Node.js 18+ + Next.js 14 (App Router), Zustand 4+, Chart.js 4+, Playwright (PDF), Prisma ORM (001-ivplt-report-automation)
-- Supabase PostgreSQL + Supabase Storage (images/certificates) (001-ivplt-report-automation)
-- @openai/agents SDK for AI-generated conclusions (Phase 5 - 001-ivplt-report-automation)
+- TypeScript 5+, Node.js 18+ + Next.js 14 (App Router), Zustand, Chart.js, Playwright (PDF), OpenAI SDK / Anthropic SDK (002-auto-report-pipeline)
+- Supabase PostgreSQL + Supabase Storage (files) (002-auto-report-pipeline)
+- TypeScript 5+, Node.js 18+ + Next.js 14 (App Router), Zustand, Chart.js, Playwright (PDF), OpenAI SDK, `xlsx` (002-auto-report-pipeline)
 
 ## Recent Changes
-- 001-ivplt-report-automation: Added TypeScript 5+, Node.js 18+ + Next.js 14 (App Router), Zustand 4+, Chart.js 4+, Playwright (PDF), Prisma ORM
+- 002-auto-report-pipeline: Added TypeScript 5+, Node.js 18+ + Next.js 14 (App Router), Zustand, Chart.js, Playwright (PDF), OpenAI SDK / Anthropic SDK

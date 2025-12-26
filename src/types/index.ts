@@ -376,6 +376,8 @@ export interface SavedTest {
   loadEntries: LoadEntry[];
   createdAt: string;
   updatedAt: string;
+  /** Cached reading count from API _count - used for list display without loading all readings */
+  readingsCount?: number;
 }
 
 /**
@@ -399,9 +401,10 @@ export interface PileTestSummary {
 
 /**
  * Current step in the test workflow.
- * Why: Tracks user progress through details → entry → report screens.
+ * Why: Tracks user progress through upload → details → entry → report screens.
+ * 'upload' is first tab - upload field sheet PDFs for AI extraction.
  */
-export type WorkflowStep = 'details' | 'entry' | 'images' | 'certificates' | 'report';
+export type WorkflowStep = 'upload' | 'details' | 'entry' | 'images' | 'certificates' | 'report';
 
 /**
  * Current view in the app.
@@ -453,3 +456,235 @@ export function calculateAverageSettlement(
  * Why: Pass/fail criteria - net settlement must be ≤ 12mm.
  */
 export const SETTLEMENT_LIMIT_MM = 12;
+
+// =============================================================================
+// INGESTION & VERIFICATION TYPES (002-auto-report-pipeline)
+// =============================================================================
+
+/**
+ * Supported file types for ingestion.
+ * Why: Defines what files the system can process for data extraction.
+ */
+export type IngestionFileType = 'pdf' | 'xlsx' | 'csv' | 'image';
+
+/**
+ * Methods used to extract data from uploaded files.
+ * Why: Different file types require different extraction approaches.
+ */
+export type ExtractionMethod = 'excel' | 'pdf-text' | 'vision';
+
+/**
+ * Status of an ingestion job.
+ * Why: Tracks progress through the extraction pipeline.
+ */
+export type IngestionStatus = 'pending' | 'extracting' | 'review' | 'completed' | 'failed';
+
+/**
+ * A value extracted from a file with confidence score.
+ * Why: Allows users to review low-confidence extractions before applying.
+ */
+export interface ExtractedValue {
+  value: string;
+  confidence: number; // 0-100
+}
+
+/**
+ * A reading row extracted from uploaded file.
+ * Why: Maps raw file data to our LoadEntry structure with confidence tracking.
+ */
+export interface ExtractedReading {
+  rowIndex: number;
+  timestamp?: ExtractedValue;
+  pressureGauge: ExtractedValue;
+  dialGauge1: ExtractedValue;
+  dialGauge2: ExtractedValue;
+  dialGauge3: ExtractedValue;
+  dialGauge4: ExtractedValue;
+  phase?: ExtractedValue;
+  remark?: ExtractedValue;
+}
+
+/**
+ * Project info extracted from uploaded file.
+ * Why: Partial extraction - some fields may not be present in source.
+ */
+export interface ExtractedProjectInfo {
+  pileId?: ExtractedValue;
+  reportNo?: ExtractedValue;
+  project?: ExtractedValue;
+  location?: ExtractedValue;
+  client?: ExtractedValue;
+  contractor?: ExtractedValue;
+  pileDiameter?: ExtractedValue;
+  pileDepth?: ExtractedValue;
+  designLoad?: ExtractedValue;
+  ramArea?: ExtractedValue;
+  testDate?: ExtractedValue;
+  dateOfCasting?: ExtractedValue;
+  concreteGrade?: ExtractedValue;
+}
+
+/**
+ * Tracks a file upload and extraction session.
+ * Why: Enables async processing and progress tracking for file ingestion.
+ */
+export interface IngestionJob {
+  id: string;
+  testId?: string; // Linked after extraction is confirmed
+
+  // File metadata
+  fileName: string;
+  fileType: IngestionFileType;
+  fileUrl?: string; // Supabase Storage URL
+  fileSizeBytes: number;
+
+  // Processing state
+  status: IngestionStatus;
+  extractionMethod?: ExtractionMethod;
+
+  // Extracted data (populated after extraction)
+  extractedProjectInfo?: ExtractedProjectInfo;
+  extractedReadings?: ExtractedReading[];
+
+  // Quality metrics
+  overallConfidence: number; // 0-100
+  lowConfidenceFields: string[]; // Fields requiring user review
+  extractionErrors?: string[];
+
+  // Timestamps
+  createdAt: string;
+  completedAt?: string;
+}
+
+/**
+ * Verification status for a test report.
+ * Why: Tracks whether a report has been verified and approved.
+ */
+export type VerificationStatus = 'pending' | 'verified' | 'failed' | 'approved';
+
+/**
+ * Result of a single verification check.
+ * Why: Provides granular feedback on each aspect of report quality.
+ */
+export interface CheckResult {
+  passed: boolean;
+  score: number; // 0-100
+  details?: string;
+}
+
+/**
+ * Severity levels for verification issues.
+ * Why: Helps users prioritize which issues to fix first.
+ */
+export type IssueSeverity = 'critical' | 'warning' | 'info';
+
+/**
+ * Categories of verification issues.
+ * Why: Groups issues by type for better organization.
+ */
+export type IssueCategory = 'data' | 'compliance' | 'formatting';
+
+/**
+ * A single issue found during verification.
+ * Why: Actionable feedback for improving report quality.
+ */
+export interface VerificationIssue {
+  id: string;
+  severity: IssueSeverity;
+  category: IssueCategory;
+  message: string;
+  location?: string; // e.g., "Reading #5, Dial Gauge 1"
+  suggestedCorrection?: string;
+  correctionConfidence?: number; // 0-100
+}
+
+/**
+ * Output of the verification agent.
+ * Why: Comprehensive quality assessment of a generated report.
+ */
+export interface VerificationReport {
+  id: string;
+  testId: string;
+  reportVersion: number;
+
+  // Scoring
+  score: number; // 0-100
+  status: 'pass' | 'warn' | 'fail'; // pass >= 90, warn 80-89, fail < 80
+
+  // Individual checks
+  checks: {
+    dataIntegrity: CheckResult;
+    complianceIS2911: CheckResult;
+    visualQuality: CheckResult;
+  };
+
+  // Issues found
+  issues: VerificationIssue[];
+
+  // Summary
+  summary: string;
+
+  // Timestamps
+  createdAt: string;
+}
+
+/**
+ * Records a correction made by the system or user.
+ * Why: Audit trail for all changes, enables rollback if needed.
+ */
+export interface CorrectionLog {
+  id: string;
+  testId: string;
+  verificationReportId: string;
+
+  // What was corrected
+  issueId: string;
+  field: string; // e.g., "readings[5].dialGauge1"
+  originalValue: string;
+  correctedValue: string;
+
+  // Confidence and approval
+  confidence: number; // 0-100
+  autoApplied: boolean; // true if confidence > 90
+  userApproved?: boolean;
+
+  // Result
+  resultedInImprovement?: boolean;
+
+  // Timestamps
+  createdAt: string;
+  appliedAt?: string;
+}
+
+// =============================================================================
+// EXTENDED SAVED TEST (with verification fields)
+// =============================================================================
+
+/**
+ * Source file info attached to a test.
+ * Why: Audit trail - links generated report back to original data source.
+ */
+export interface SourceFile {
+  name: string;
+  url: string;
+  type: IngestionFileType | 'manual';
+}
+
+/**
+ * Extended SavedTest with ingestion and verification tracking.
+ * Why: Adds traceability from source file through verification to approval.
+ */
+export interface SavedTestExtended extends SavedTest {
+  // Ingestion tracking
+  ingestionJobId?: string;
+  sourceFile?: SourceFile;
+
+  // Verification status
+  verificationStatus: VerificationStatus;
+  latestVerificationId?: string;
+  verificationScore?: number;
+
+  // Approval tracking
+  approvedAt?: string;
+  approvedBy?: string;
+}

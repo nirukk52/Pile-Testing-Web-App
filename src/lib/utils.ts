@@ -13,16 +13,20 @@ export function cn(...inputs: ClassValue[]) {
 /**
  * Formats a date/timestamp string to dd/mm/yyyy format.
  * Why: Ensures consistent date display across the app per IS 2911 standards.
+ * Uses IST (Asia/Kolkata) - all field times are in Indian Standard Time.
  * @param dateInput - ISO string, Date object, or date string
  * @returns Formatted date as dd/mm/yyyy
  */
 export function formatDateDDMMYYYY(dateInput: string | Date): string {
   try {
     const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}/${month}/${year}`;
+    // Use IST timezone for display (all projects are in India)
+    return date.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      timeZone: 'Asia/Kolkata',
+    }).replace(/\//g, '/');
   } catch {
     return String(dateInput);
   }
@@ -31,6 +35,7 @@ export function formatDateDDMMYYYY(dateInput: string | Date): string {
 /**
  * Formats a date/timestamp string to "15 January 2024" format.
  * Why: Used in formal reports for better readability.
+ * Uses IST (Asia/Kolkata) - all projects are in India.
  * @param dateInput - ISO string, Date object, or date string
  * @returns Formatted date as "DD Month YYYY"
  */
@@ -41,6 +46,7 @@ export function formatDateLong(dateInput: string | Date): string {
       day: '2-digit',
       month: 'long',
       year: 'numeric',
+      timeZone: 'Asia/Kolkata',
     });
   } catch {
     return String(dateInput);

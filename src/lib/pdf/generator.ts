@@ -143,9 +143,17 @@ export async function generatePDF(options: PDFGeneratorOptions): Promise<Buffer>
   const page: Page = await browser.newPage();
 
   try {
-    // Set content
+    // Set content and wait for network (including Chart.js CDN)
     await page.setContent(html, {
       waitUntil: 'networkidle0',
+    });
+
+    // Wait for Chart.js to render (if present)
+    await page.evaluate(() => {
+      return new Promise<void>((resolve) => {
+        // Give Chart.js time to render after script loads
+        setTimeout(resolve, 500);
+      });
     });
 
     // Generate PDF
@@ -174,8 +182,10 @@ export async function generatePDFWithPageNumbers(
   options?: Partial<PDFGeneratorOptions>
 ): Promise<Buffer> {
   const footerTemplate = `
-    <div style="width: 100%; font-size: 10px; padding: 10px 20px; text-align: center; color: #666;">
-      <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
+    <div style="width: 100%; font-size: 9px; padding: 8px 40px; display: flex; justify-content: space-between; align-items: center; color: #64748b; border-top: 1px solid #e2e8f0;">
+      <span style="flex: 1; text-align: left;">IVPLT Report - IS 2911 (Part 4) - 2013</span>
+      <span style="flex: 1; text-align: center; font-weight: 600;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
+      <span style="flex: 1; text-align: right;"></span>
     </div>
   `;
 
@@ -186,7 +196,7 @@ export async function generatePDFWithPageNumbers(
     margin: {
       top: '20mm',
       right: '15mm',
-      bottom: '25mm', // Extra space for footer
+      bottom: '22mm', // Space for footer
       left: '15mm',
     },
     ...options,

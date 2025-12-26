@@ -1,13 +1,30 @@
 'use client';
 
-import { useEffect, useRef, useMemo, useState, useCallback } from 'react';
+import { useEffect, useRef, useMemo, useState, useCallback, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
-import { Download, CheckCircle2, XCircle, AlertCircle, Loader2, FileText, Sparkles, Edit3, Save, X, RotateCcw, FileOutput } from 'lucide-react';
-import type { LoadEntry, LegacyProjectInfo } from '@/types';
+import { Download, CheckCircle2, XCircle, AlertCircle, Loader2, FileText, Sparkles, Edit3, Save, X, RotateCcw, FileOutput, Shield, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import type { LoadEntry, LegacyProjectInfo, VerificationReport, LegacyTestPhase } from '@/types';
+import { ScoreBadge } from '@/components/ui/score-badge';
 import { calculateAverageSettlement, TEST_TYPES } from '@/types';
 import { getTestEngine } from '@/engines';
 import type { ReadingInput, CalculationResult, TestMeta, TestType } from '@/engines';
 import { formatDateDDMMYYYY, formatDateLong } from '@/lib/utils';
+
+/**
+ * Maximum rows per page in observation sheet - matches data entry.
+ * Why: Consistent pagination between data entry and report view.
+ */
+const ROWS_PER_PAGE = 25;
+
+/**
+ * Phase configuration for visual styling in observation sheet.
+ * Why: Consistent colors for loading/holding/unloading phases.
+ */
+const phases: Array<{ key: LegacyTestPhase; label: string; color: string }> = [
+  { key: 'loading', label: 'Loading', color: 'bg-blue-600' },
+  { key: 'holding', label: 'Holding', color: 'bg-amber-600' },
+  { key: 'unloading', label: 'Unloading', color: 'bg-green-600' },
+];
 
 /**
  * Props for the ReportView component.
@@ -40,6 +57,15 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
   const [isSavingConclusion, setIsSavingConclusion] = useState(false);
   const [conclusionSource, setConclusionSource] = useState<'ai' | 'template' | 'saved' | null>(null);
   const [conclusionError, setConclusionError] = useState<string | null>(null);
+
+  // Verification state
+  const [verificationReport, setVerificationReport] = useState<VerificationReport | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [showVerificationDetails, setShowVerificationDetails] = useState(false);
+
+  // Observation sheet pagination state
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Get test type engine
   const testType = (projectInfo.testType as TestType) || 'IVPLT';
@@ -289,6 +315,39 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
     setIsEditingConclusion(true);
   }, [conclusion]);
 
+  /**
+   * Run verification on the test.
+   * Why: Scores the report for data integrity and IS 2911 compliance.
+   */
+  const handleVerify = useCallback(async () => {
+    if (!testId) {
+      setVerificationError('Test must be saved to database to verify');
+      return;
+    }
+
+    setIsVerifying(true);
+    setVerificationError(null);
+
+    try {
+      const response = await fetch(`/api/verify/${testId}`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Verification failed');
+      }
+
+      const report: VerificationReport = await response.json();
+      setVerificationReport(report);
+    } catch (error) {
+      console.error('Verification failed:', error);
+      setVerificationError(error instanceof Error ? error.message : 'Verification failed');
+    } finally {
+      setIsVerifying(false);
+    }
+  }, [testId]);
+
   // Prepare chart with loading and unloading curves
   useEffect(() => {
     if (!chartRef.current || readingInputs.length === 0) return;
@@ -438,39 +497,6 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
     };
   }, [readingInputs, graphConfig]);
 
-  // Format date/time for table (dd/mm/yyyy format)
-  const formatDateTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return {
-      date: formatDateDDMMYYYY(date),
-      time: date.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-    };
-  };
-
-  // Build table rows
-  const tableRows = loadEntries.flatMap((entry) =>
-    entry.readings.map((reading) => {
-      const { date, time } = formatDateTime(reading.timestamp);
-      return {
-        load: entry.load,
-        pressure: entry.pressureGauge,
-        date,
-        time,
-        avgTestPile: calculateAverageSettlement(
-          reading.dialGauge1,
-          reading.dialGauge2,
-          reading.dialGauge3,
-          reading.dialGauge4
-        ),
-        remark: reading.remark || '',
-        phase: reading.phase,
-      };
-    })
-  );
-
   // Status badge component
   const StatusBadge = ({ passed }: { passed: boolean }) => (
     <div
@@ -575,6 +601,173 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
         </div>
         <StatusBadge passed={result.isPassed} />
       </div>
+
+      {/* Verification Card */}
+      {testId && (
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 print:hidden">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                <Shield className="w-5 h-5 text-indigo-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-800">Report Verification</h3>
+                <p className="text-xs text-slate-500">AI-powered quality check</p>
+              </div>
+            </div>
+            {verificationReport ? (
+              <ScoreBadge score={verificationReport.score} size="lg" />
+            ) : (
+              <button
+                onClick={handleVerify}
+                disabled={isVerifying || loadEntries.length === 0}
+                className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-medium hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+              >
+                {isVerifying ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  <>
+                    <Shield className="w-4 h-4" />
+                    Verify Report
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+
+          {verificationError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-700 text-sm mb-3">
+              {verificationError}
+            </div>
+          )}
+
+          {verificationReport && (
+            <>
+              {/* Summary */}
+              <div className={`rounded-lg p-3 mb-3 ${
+                verificationReport.status === 'pass' ? 'bg-green-50 border border-green-200' :
+                verificationReport.status === 'warn' ? 'bg-amber-50 border border-amber-200' :
+                'bg-red-50 border border-red-200'
+              }`}>
+                <p className={`text-sm ${
+                  verificationReport.status === 'pass' ? 'text-green-700' :
+                  verificationReport.status === 'warn' ? 'text-amber-700' :
+                  'text-red-700'
+                }`}>
+                  {verificationReport.summary}
+                </p>
+              </div>
+
+              {/* Check Results */}
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                <div className={`rounded-lg p-2 text-center ${
+                  verificationReport.checks.dataIntegrity.passed ? 'bg-green-50' : 'bg-red-50'
+                }`}>
+                  <p className="text-xs text-slate-500">Data Integrity</p>
+                  <p className={`text-lg font-bold ${
+                    verificationReport.checks.dataIntegrity.passed ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {verificationReport.checks.dataIntegrity.score}%
+                  </p>
+                </div>
+                <div className={`rounded-lg p-2 text-center ${
+                  verificationReport.checks.complianceIS2911.passed ? 'bg-green-50' : 'bg-red-50'
+                }`}>
+                  <p className="text-xs text-slate-500">IS 2911</p>
+                  <p className={`text-lg font-bold ${
+                    verificationReport.checks.complianceIS2911.passed ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {verificationReport.checks.complianceIS2911.score}%
+                  </p>
+                </div>
+                <div className={`rounded-lg p-2 text-center ${
+                  verificationReport.checks.visualQuality.passed ? 'bg-green-50' : 'bg-red-50'
+                }`}>
+                  <p className="text-xs text-slate-500">Quality</p>
+                  <p className={`text-lg font-bold ${
+                    verificationReport.checks.visualQuality.passed ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {verificationReport.checks.visualQuality.score}%
+                  </p>
+                </div>
+              </div>
+
+              {/* Issues List (collapsible) */}
+              {verificationReport.issues.length > 0 && (
+                <div>
+                  <button
+                    onClick={() => setShowVerificationDetails(!showVerificationDetails)}
+                    className="w-full flex items-center justify-between py-2 text-sm text-slate-600 hover:text-slate-800"
+                  >
+                    <span>{verificationReport.issues.length} issues found</span>
+                    {showVerificationDetails ? (
+                      <ChevronUp className="w-4 h-4" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4" />
+                    )}
+                  </button>
+                  {showVerificationDetails && (
+                    <div className="space-y-2 mt-2">
+                      {verificationReport.issues.map((issue) => (
+                        <div
+                          key={issue.id}
+                          className={`rounded-lg p-3 text-sm ${
+                            issue.severity === 'critical' ? 'bg-red-50 border-l-4 border-red-500' :
+                            issue.severity === 'warning' ? 'bg-amber-50 border-l-4 border-amber-500' :
+                            'bg-slate-50 border-l-4 border-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className={`font-medium ${
+                                issue.severity === 'critical' ? 'text-red-700' :
+                                issue.severity === 'warning' ? 'text-amber-700' :
+                                'text-slate-700'
+                              }`}>
+                                {issue.message}
+                              </p>
+                              {issue.location && (
+                                <p className="text-xs text-slate-500 mt-1">{issue.location}</p>
+                              )}
+                            </div>
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                              issue.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                              issue.severity === 'warning' ? 'bg-amber-100 text-amber-700' :
+                              'bg-slate-100 text-slate-600'
+                            }`}>
+                              {issue.severity}
+                            </span>
+                          </div>
+                          {issue.suggestedCorrection && (
+                            <p className="text-xs text-green-600 mt-2">
+                              💡 Suggested: {issue.suggestedCorrection}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Re-verify Button */}
+              <div className="mt-3 pt-3 border-t border-slate-100 flex justify-end">
+                <button
+                  onClick={handleVerify}
+                  disabled={isVerifying}
+                  className="text-indigo-600 hover:text-indigo-700 text-sm font-medium flex items-center gap-1"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Re-verify
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* KPI Cards Grid */}
       <section className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -832,54 +1025,237 @@ export function ReportView({ projectInfo, loadEntries, testId }: ReportViewProps
         )}
       </div>
 
-      {/* Data Table */}
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
-        <h3 className="font-bold text-slate-800 mb-4">Load Increment Summary</h3>
+      {/* 7.0 Observation Sheet - Field Sheet Style Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200">
+        <div className="p-4 border-b border-slate-200">
+          <h3 className="font-bold text-slate-800">7.0 Observation Sheet</h3>
+          <p className="text-sm text-slate-500 mt-1">Load increment readings as per IS 2911 (Part 4)</p>
+        </div>
 
-        {tableRows.length === 0 ? (
-          <div className="bg-slate-50 rounded-lg p-8 text-center text-slate-500">
+        {loadEntries.length === 0 ? (
+          <div className="p-8 text-center text-slate-500">
             No test data recorded yet
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-50 border-b-2 border-slate-200">
-                  <th className="text-left px-3 py-3 text-slate-600 font-semibold">Phase</th>
-                  <th className="text-left px-3 py-3 text-slate-600 font-semibold">Date</th>
-                  <th className="text-left px-3 py-3 text-slate-600 font-semibold">Time</th>
-                  <th className="text-left px-3 py-3 text-slate-600 font-semibold">Load (MT)</th>
-                  <th className="text-left px-3 py-3 text-slate-600 font-semibold">Pressure</th>
-                  <th className="text-left px-3 py-3 text-slate-600 font-semibold">Avg Settlement</th>
-                  <th className="text-left px-3 py-3 text-slate-600 font-semibold">Remarks</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tableRows.map((row, index) => {
-                  const phaseColors: Record<string, string> = {
-                    loading: 'bg-blue-100 text-blue-700',
-                    holding: 'bg-amber-100 text-amber-700',
-                    unloading: 'bg-green-100 text-green-700',
-                  };
-                  return (
-                    <tr key={index} className="border-b border-slate-100 hover:bg-slate-50">
-                      <td className="px-3 py-3">
-                        <span className={`px-2 py-1 rounded text-xs font-semibold ${phaseColors[row.phase] || 'bg-slate-100'}`}>
-                          {row.phase.toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-slate-700">{row.date}</td>
-                      <td className="px-3 py-3 text-slate-700">{row.time}</td>
-                      <td className="px-3 py-3 font-semibold text-blue-700">{row.load}</td>
-                      <td className="px-3 py-3 text-slate-700">{row.pressure} kg/cm²</td>
-                      <td className="px-3 py-3 font-semibold text-green-700">{row.avgTestPile} mm</td>
-                      <td className="px-3 py-3 text-slate-500 italic">{row.remark || '-'}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {/* Page Header - Field Sheet Style */}
+            <div className="flex items-center justify-between bg-slate-800 text-white px-4 py-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold">Page {currentPage}</span>
+                <span className="text-slate-400 text-xs">of {Math.max(1, Math.ceil(loadEntries.length / ROWS_PER_PAGE))}</span>
+              </div>
+              <div className="flex items-center gap-1 text-xs text-slate-300">
+                <span>
+                  {Math.min(loadEntries.length - (currentPage - 1) * ROWS_PER_PAGE, ROWS_PER_PAGE)}/{ROWS_PER_PAGE} rows
+                </span>
+              </div>
+            </div>
+
+            {/* Observation Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-slate-100 border-b-2 border-slate-300">
+                    <th className="px-2 py-2 border-r border-slate-300 min-w-[70px]">DATE</th>
+                    <th className="px-2 py-2 border-r border-slate-300 min-w-[60px]">
+                      TIME
+                      <br />
+                      (Hrs)
+                    </th>
+                    <th className="px-2 py-2 border-r border-slate-300 min-w-[70px]">
+                      PRESSURE
+                      <br />
+                      GAUGE
+                      <br />
+                      READING
+                      <br />
+                      kg/cm²
+                    </th>
+                    <th className="px-2 py-2 border-r border-slate-300 min-w-[60px]">LOAD IN MT</th>
+                    <th colSpan={4} className="px-2 py-2 border-r border-slate-300">
+                      Dial Gauge
+                    </th>
+                    <th className="px-2 py-2 border-r border-slate-300 min-w-[70px]">
+                      AVERAGE
+                      <br />
+                      SETTLEMENT
+                      <br />
+                      IN MM
+                    </th>
+                    <th className="px-2 py-2 min-w-[80px]">REMARK</th>
+                  </tr>
+                  <tr className="bg-slate-50 border-b border-slate-300">
+                    <th colSpan={4} className="border-r border-slate-300"></th>
+                    <th className="px-2 py-1 border-r border-slate-300">
+                      Reading
+                      <br />1
+                    </th>
+                    <th className="px-2 py-1 border-r border-slate-300">
+                      Reading
+                      <br />2
+                    </th>
+                    <th className="px-2 py-1 border-r border-slate-300">
+                      Reading
+                      <br />3
+                    </th>
+                    <th className="px-2 py-1 border-r border-slate-300">
+                      Reading
+                      <br />4
+                    </th>
+                    <th className="border-r border-slate-300"></th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    // Get current page entries
+                    const startIdx = (currentPage - 1) * ROWS_PER_PAGE;
+                    const endIdx = startIdx + ROWS_PER_PAGE;
+                    const pageEntries = loadEntries.slice(startIdx, endIdx);
+
+                    return pageEntries.map((entry, pageIndex) => {
+                      const globalIndex = startIdx + pageIndex;
+                      const reading = entry.readings[0];
+                      const phase = reading.phase || 'loading';
+                      const phaseInfo = phases.find((p) => p.key === phase);
+
+                      const loadDate = new Date(reading.timestamp);
+                      const dateStr = formatDateDDMMYYYY(loadDate);
+                      // Display in IST (Asia/Kolkata) - all field times are in Indian Standard Time
+                      const timeStr = loadDate.toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false,
+                        timeZone: 'Asia/Kolkata',
+                      });
+
+                      const avg = calculateAverageSettlement(
+                        reading.dialGauge1,
+                        reading.dialGauge2,
+                        reading.dialGauge3,
+                        reading.dialGauge4
+                      );
+
+                      // Check if we need to show phase header
+                      const prevEntry = globalIndex > 0 ? loadEntries[globalIndex - 1] : null;
+                      const prevPhase = prevEntry ? prevEntry.readings[0].phase || 'loading' : null;
+                      const showPhaseHeader = phase !== prevPhase;
+
+                      // Check for date changes
+                      const prevDate = prevEntry
+                        ? formatDateDDMMYYYY(new Date(prevEntry.readings[0].timestamp))
+                        : null;
+                      const dateChanged = prevDate && dateStr !== prevDate;
+
+                      // Check for load changes
+                      const prevLoad = prevEntry ? prevEntry.load : null;
+                      const loadChanged = !prevLoad || entry.load !== prevLoad;
+
+                      return (
+                        <Fragment key={entry.id}>
+                          {/* Phase Header Row */}
+                          {showPhaseHeader && (
+                            <tr>
+                              <td
+                                colSpan={10}
+                                className={`${phaseInfo?.color} text-white text-center py-1 font-semibold border-y border-slate-300`}
+                              >
+                                {phaseInfo?.label}
+                              </td>
+                            </tr>
+                          )}
+
+                          {/* Data Row */}
+                          <tr className="border-b border-slate-200 hover:bg-slate-50">
+                            <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold">
+                              {dateChanged || globalIndex === 0 ? dateStr : ''}
+                            </td>
+                            <td className="px-2 py-2 border-r border-slate-200 text-center">
+                              {timeStr}
+                            </td>
+                            <td className="px-2 py-2 border-r border-slate-200 text-center font-semibold">
+                              {entry.pressureGauge}
+                            </td>
+                            <td className="px-2 py-2 border-r border-slate-200 text-center text-blue-700 font-semibold">
+                              {loadChanged ? entry.load : ''}
+                            </td>
+                            <td className="px-2 py-2 border-r border-slate-200 text-center">
+                              {reading.dialGauge1}
+                            </td>
+                            <td className="px-2 py-2 border-r border-slate-200 text-center">
+                              {reading.dialGauge2}
+                            </td>
+                            <td className="px-2 py-2 border-r border-slate-200 text-center">
+                              {reading.dialGauge3}
+                            </td>
+                            <td className="px-2 py-2 border-r border-slate-200 text-center">
+                              {reading.dialGauge4}
+                            </td>
+                            <td className="px-2 py-2 border-r border-slate-200 text-center text-green-700 font-semibold">
+                              {avg}
+                            </td>
+                            <td className="px-2 py-2 text-xs text-gray-600 italic">
+                              {reading.remark || '-'}
+                            </td>
+                          </tr>
+                        </Fragment>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Page Navigation */}
+            {loadEntries.length > ROWS_PER_PAGE && (
+              <div className="flex items-center justify-between bg-white border-t border-slate-200 px-3 py-2 print:hidden">
+                {/* Previous Page */}
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                    currentPage === 1
+                      ? 'text-slate-300 cursor-not-allowed'
+                      : 'text-slate-600 hover:bg-slate-100 active:scale-95'
+                  }`}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span className="hidden sm:inline">Previous</span>
+                </button>
+
+                {/* Page Numbers */}
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.ceil(loadEntries.length / ROWS_PER_PAGE) }, (_, i) => i + 1).map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`w-8 h-8 rounded-lg text-sm font-semibold transition-all ${
+                        page === currentPage
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Next Page */}
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(Math.ceil(loadEntries.length / ROWS_PER_PAGE), p + 1))}
+                  disabled={currentPage === Math.ceil(loadEntries.length / ROWS_PER_PAGE)}
+                  className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                    currentPage === Math.ceil(loadEntries.length / ROWS_PER_PAGE)
+                      ? 'text-slate-300 cursor-not-allowed'
+                      : 'text-slate-600 hover:bg-slate-100 active:scale-95'
+                  }`}
+                >
+                  <span className="hidden sm:inline">Next</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

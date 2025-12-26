@@ -1,0 +1,145 @@
+<!-- 
+  Chart Section Template for Pile Load Test Reports
+  Why: Standardized chart page with KPIs and summary.
+  
+  Variables to replace:
+  - {{CHART_IMAGE_BASE64}} - Base64 encoded chart image
+  - {{TEST_LOAD}} - Test load in MT
+  - {{MAX_SETTLEMENT}} - Maximum settlement in mm
+  - {{NET_SETTLEMENT}} - Net settlement in mm
+  - {{SETTLEMENT_LIMIT}} - IS 2911 limit (usually 12mm)
+  - {{IS_PASSED}} - true/false for styling
+  - {{STATUS_TEXT}} - "PASSED ✓" or "FAILED ✗"
+  - {{STATUS_MESSAGE}} - e.g., "within the 12mm limit"
+-->
+
+<div class="page chart-page">
+  <div class="page-header">
+    <span>{{DATE}}</span>
+    <span>{{TEST_TYPE}} Report - {{PILE_ID}}</span>
+  </div>
+  
+  <div class="section">
+    <h2 class="section-title">5.0 Load vs Settlement Curve</h2>
+    
+    <div class="chart-container">
+      <img src="{{CHART_IMAGE_BASE64}}" alt="Load vs Settlement Curve" />
+    </div>
+    
+    <div class="chart-kpi-grid">
+      <div class="chart-kpi">
+        <div class="label">Test Load</div>
+        <div class="value">{{TEST_LOAD}}</div>
+        <div class="unit">MT</div>
+      </div>
+      <div class="chart-kpi">
+        <div class="label">Max Settlement</div>
+        <div class="value">{{MAX_SETTLEMENT}}</div>
+        <div class="unit">mm</div>
+      </div>
+      <div class="chart-kpi">
+        <div class="label">Net Settlement</div>
+        <div class="value">{{NET_SETTLEMENT}}</div>
+        <div class="unit">mm</div>
+      </div>
+    </div>
+    
+    <div class="chart-summary {{IS_PASSED ? 'passed' : 'failed'}}">
+      <h3>TEST {{STATUS_TEXT}}</h3>
+      <p>Net settlement {{NET_SETTLEMENT}}mm is {{STATUS_MESSAGE}} (IS 2911 Part 4)</p>
+    </div>
+  </div>
+</div>
+
+<style>
+.chart-page {
+  padding-top: 50px;
+  page-break-before: always;
+}
+
+.chart-container {
+  width: 100%;
+  height: 380px;
+  margin: 20px 0;
+  text-align: center;
+}
+
+.chart-container img {
+  max-width: 100%;
+  max-height: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.chart-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+  margin: 20px 0;
+}
+
+.chart-kpi {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+
+.chart-kpi .label {
+  font-size: 8pt;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.chart-kpi .value {
+  font-size: 20pt;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.chart-kpi .unit {
+  font-size: 9pt;
+  color: #94a3b8;
+}
+
+.chart-summary {
+  border-radius: 8px;
+  padding: 15px 20px;
+  text-align: center;
+  margin-top: 20px;
+}
+
+.chart-summary.passed {
+  background: #dcfce7;
+  border: 2px solid #22c55e;
+}
+
+.chart-summary.failed {
+  background: #fee2e2;
+  border: 2px solid #ef4444;
+}
+
+.chart-summary.passed h3 {
+  font-size: 18pt;
+  color: #166534;
+  margin-bottom: 5px;
+}
+
+.chart-summary.failed h3 {
+  font-size: 18pt;
+  color: #991b1b;
+  margin-bottom: 5px;
+}
+
+.chart-summary.passed p {
+  font-size: 11pt;
+  color: #15803d;
+}
+
+.chart-summary.failed p {
+  font-size: 11pt;
+  color: #b91c1c;
+}
+</style>

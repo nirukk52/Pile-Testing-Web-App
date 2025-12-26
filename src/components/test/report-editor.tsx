@@ -8,8 +8,8 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { 
-  X, Download, FileText, Loader2, AlertCircle, CheckCircle2, 
-  XCircle, Edit3, Lock, ChevronRight, Image as ImageIcon,
+  X, Download, FileText, Loader2, AlertCircle,
+  Edit3, Lock, Image as ImageIcon,
   Sparkles, RotateCcw
 } from 'lucide-react';
 import type { LoadEntry, LegacyProjectInfo } from '@/types';
@@ -66,7 +66,6 @@ export function ReportEditor({
   chartRef,
   onClose,
 }: ReportEditorProps) {
-  const [activeTab, setActiveTab] = useState<'preview' | 'modern'>('preview');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   
@@ -227,30 +226,6 @@ export function ReportEditor({
             </div>
           </div>
 
-          {/* Tab Switcher */}
-          <div className="flex bg-slate-700 rounded-lg p-1">
-            <button
-              onClick={() => setActiveTab('preview')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                activeTab === 'preview'
-                  ? 'bg-white text-slate-800'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              Preview
-            </button>
-            <button
-              onClick={() => setActiveTab('modern')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                activeTab === 'modern'
-                  ? 'bg-white text-slate-800'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              Modern Preview
-            </button>
-          </div>
-
           {/* Actions */}
           <div className="flex items-center gap-2">
             <button
@@ -285,31 +260,21 @@ export function ReportEditor({
 
         {/* Modal Content */}
         <div className="flex-1 overflow-hidden flex">
-          {activeTab === 'preview' ? (
-            <PreviewTab
-              projectInfo={projectInfo}
-              loadEntries={loadEntries}
-              result={result}
-              testMeta={testMeta}
-              testTypeConfig={testTypeConfig}
-              conclusion={conclusion}
-              setConclusion={setConclusion}
-              editingSection={editingSection}
-              setEditingSection={setEditingSection}
-              onGenerateConclusion={handleGenerateConclusion}
-              onSaveConclusion={handleSaveConclusion}
-              isGeneratingConclusion={isGeneratingConclusion}
-              testId={testId}
-            />
-          ) : (
-            <ModernPreviewTab
-              projectInfo={projectInfo}
-              loadEntries={loadEntries}
-              result={result}
-              testMeta={testMeta}
-              testTypeConfig={testTypeConfig}
-            />
-          )}
+          <PreviewTab
+            projectInfo={projectInfo}
+            loadEntries={loadEntries}
+            result={result}
+            testMeta={testMeta}
+            testTypeConfig={testTypeConfig}
+            conclusion={conclusion}
+            setConclusion={setConclusion}
+            editingSection={editingSection}
+            setEditingSection={setEditingSection}
+            onGenerateConclusion={handleGenerateConclusion}
+            onSaveConclusion={handleSaveConclusion}
+            isGeneratingConclusion={isGeneratingConclusion}
+            testId={testId}
+          />
         </div>
       </div>
     </div>
@@ -749,114 +714,3 @@ function ImagesSectionEditor({
   );
 }
 
-/**
- * Modern Preview Tab - Shows web-styled view.
- */
-function ModernPreviewTab({
-  projectInfo,
-  result,
-  testMeta,
-  testTypeConfig,
-}: {
-  projectInfo: LegacyProjectInfo;
-  loadEntries: LoadEntry[];
-  result: CalculationResult;
-  testMeta: TestMeta;
-  testTypeConfig?: { id: string; name: string; fullName: string; loadMultiplier: number };
-}) {
-  return (
-    <div className="flex-1 overflow-auto bg-gray-100 p-6">
-      <div className="max-w-4xl mx-auto space-y-4">
-        {/* Pass/Fail Banner */}
-        <div
-          className={`rounded-xl p-6 text-center ${
-            result.isPassed
-              ? 'bg-green-50 border-2 border-green-200'
-              : 'bg-red-50 border-2 border-red-200'
-          }`}
-        >
-          <div className="flex items-center justify-center gap-3 mb-2">
-            {result.isPassed ? (
-              <CheckCircle2 className="w-10 h-10 text-green-600" />
-            ) : (
-              <XCircle className="w-10 h-10 text-red-600" />
-            )}
-            <span className={`text-3xl font-bold ${result.isPassed ? 'text-green-700' : 'text-red-700'}`}>
-              TEST {result.isPassed ? 'PASSED' : 'FAILED'}
-            </span>
-          </div>
-          <p className={`text-lg ${result.isPassed ? 'text-green-600' : 'text-red-600'}`}>
-            Net Settlement: {result.netSettlementMm.toFixed(2)}mm (Limit: {result.settlementLimitMm}mm)
-          </p>
-        </div>
-
-        {/* KPI Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
-            <p className="text-xs text-slate-500 uppercase tracking-wide">Test Load</p>
-            <p className="text-2xl font-bold text-slate-800">{testMeta.testLoadT.toFixed(1)} MT</p>
-            <p className="text-xs text-blue-600">{testTypeConfig?.loadMultiplier || 2.5}× Design</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
-            <p className="text-xs text-slate-500 uppercase tracking-wide">Max Settlement</p>
-            <p className="text-2xl font-bold text-slate-800">{result.maxSettlementMm.toFixed(2)} mm</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
-            <p className="text-xs text-slate-500 uppercase tracking-wide">Elastic Rebound</p>
-            <p className="text-2xl font-bold text-slate-800">{result.elasticReboundMm.toFixed(2)} mm</p>
-          </div>
-          <div className={`rounded-xl p-4 shadow-sm border-2 ${
-            result.isPassed ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
-          }`}>
-            <p className="text-xs text-slate-500 uppercase tracking-wide">Net Settlement</p>
-            <p className={`text-2xl font-bold ${result.isPassed ? 'text-green-700' : 'text-red-700'}`}>
-              {result.netSettlementMm.toFixed(2)} mm
-            </p>
-            <p className={`text-xs ${result.isPassed ? 'text-green-600' : 'text-red-600'}`}>
-              Limit: {result.settlementLimitMm}mm
-            </p>
-          </div>
-        </div>
-
-        {/* Project Info */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-          <h3 className="font-semibold text-slate-800 mb-4">Project Details</h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-            <div>
-              <p className="text-slate-500">Project</p>
-              <p className="font-medium">{projectInfo.project || '-'}</p>
-            </div>
-            <div>
-              <p className="text-slate-500">Location</p>
-              <p className="font-medium">{projectInfo.location || '-'}</p>
-            </div>
-            <div>
-              <p className="text-slate-500">Pile ID</p>
-              <p className="font-medium">{projectInfo.pileId || '-'}</p>
-            </div>
-            <div>
-              <p className="text-slate-500">Diameter</p>
-              <p className="font-medium">{projectInfo.pileDiameter || '-'} mm</p>
-            </div>
-            <div>
-              <p className="text-slate-500">Depth</p>
-              <p className="font-medium">{projectInfo.pileDepth || '-'} m</p>
-            </div>
-            <div>
-              <p className="text-slate-500">Design Load</p>
-              <p className="font-medium">{testMeta.designLoadT.toFixed(1)} MT</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Chart Placeholder */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-          <h3 className="font-semibold text-slate-800 mb-4">Load vs Settlement Chart</h3>
-          <div className="h-64 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400">
-            Chart preview from Report Summary
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
