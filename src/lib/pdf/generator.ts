@@ -1,104 +1,94 @@
 /**
  * Serverless PDF Generator
- * Why: Uses puppeteer-core with @sparticuz/chromium for Vercel serverless compatibility.
- * Previous Playwright approach didn't work on Vercel due to Chromium binary size limits.
+ * Why: Uses Browserless.io in production for reliable PDF generation.
+ * Browserless handles Chrome hosting, avoiding Vercel's serverless limitations.
+ * Falls back to local Chrome for development.
  */
 
 import puppeteer, { type Browser, type Page } from 'puppeteer-core';
-import chromium from '@sparticuz/chromium';
 
 /**
- * Check if running in serverless environment (Vercel).
- * Why: Different browser launch config needed for local vs serverless.
+ * Check if Browserless is configured.
+ * Why: Use Browserless in production, local Chrome for development.
  */
-const isServerless = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
-
-let browserInstance: Browser | null = null;
+const BROWSERLESS_API_KEY = process.env.BROWSERLESS_API_KEY;
+const BROWSERLESS_ENDPOINT = `wss://production-sfo.browserless.io?token=${BROWSERLESS_API_KEY}`;
 
 /**
- * Get or create a browser instance.
- * Why: Reuse browser for better performance across multiple PDF generations.
- * Uses @sparticuz/chromium on serverless, system Chrome locally.
+ * Get a browser instance.
+ * Why: Connects to Browserless.io in production for reliable PDF generation.
+ * Uses local Chrome for development. Does NOT reuse connections to avoid stale sessions.
  */
 async function getBrowser(): Promise<Browser> {
-  if (browserInstance) {
-    return browserInstance;
-  }
-
   // High-quality viewport for crisp PDF rendering
-  // deviceScaleFactor: 2 gives retina-quality output
-  // A4 aspect ratio approximately 1:1.414
   const highQualityViewport = { 
     width: 794,  // A4 width at 96 DPI
     height: 1123, // A4 height at 96 DPI
     deviceScaleFactor: 2 
   };
 
-  if (isServerless) {
-    // Serverless environment (Vercel)
-    // @sparticuz/chromium types may be incomplete, so we use type assertions
-    const execPath = await chromium.executablePath();
-    
-    browserInstance = await puppeteer.launch({
-      args: chromium.args,
-      defaultViewport: highQualityViewport,
-      executablePath: execPath,
-      headless: true,
-    });
-  } else {
-    // Local development - try to find Chrome
-    const possiblePaths = [
-      // macOS
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      '/Applications/Chromium.app/Contents/MacOS/Chromium',
-      // Linux
-      '/usr/bin/google-chrome',
-      '/usr/bin/chromium-browser',
-      '/usr/bin/chromium',
-      // Windows
-      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    ];
-
-    let executablePath: string | undefined;
-    
-    // Try to find an existing Chrome installation
-    for (const path of possiblePaths) {
-      try {
-        const fs = await import('fs');
-        if (fs.existsSync(path)) {
-          executablePath = path;
-          break;
-        }
-      } catch {
-        // Continue to next path
-      }
-    }
-
-    if (!executablePath) {
-      // Fallback: use @sparticuz/chromium even locally
-      executablePath = await chromium.executablePath();
-    }
-
-    browserInstance = await puppeteer.launch({
-      headless: true,
-      executablePath,
-      defaultViewport: highQualityViewport,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+  if (BROWSERLESS_API_KEY) {
+    // Production: Connect to Browserless.io hosted Chrome
+    console.log('[PDF Generator] Connecting to Browserless.io...');
+    return await puppeteer.connect({
+      browserWSEndpoint: BROWSERLESS_ENDPOINT,
     });
   }
 
-  return browserInstance;
+  // Local development: Use local Chrome
+  console.log('[PDF Generator] Using local Chrome...');
+  const possiblePaths = [
+    // macOS
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    // Linux
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+    // Windows
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  ];
+
+  let executablePath: string | undefined;
+  
+  for (const path of possiblePaths) {
+    try {
+      const fs = await import('fs');
+      if (fs.existsSync(path)) {
+        executablePath = path;
+        break;
+      }
+    } catch {
+      // Continue to next path
+    }
+  }
+
+  if (!executablePath) {
+    throw new Error(
+      'Chrome not found. Install Chrome or set BROWSERLESS_API_KEY for production.'
+    );
+  }
+
+  return await puppeteer.launch({
+    headless: true,
+    executablePath,
+    defaultViewport: highQualityViewport,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+  });
 }
 
 /**
  * Close the browser instance.
- * Why: Clean up resources when done.
+ * Why: Clean up resources when done. Critical for Browserless to avoid hitting concurrency limits.
  */
-export async function closeBrowser(): Promise<void> {
-  if (browserInstance) {
-    await browserInstance.close();
-    browserInstance = null;
+export async function closeBrowser(browser: Browser | null): Promise<void> {
+  if (browser) {
+    try {
+      await browser.close();
+    } catch (error) {
+      console.error('[PDF Generator] Error closing browser:', error);
+    }
   }
 }
 
@@ -132,6 +122,7 @@ export interface PDFGeneratorOptions {
 /**
  * Generate PDF from HTML content.
  * Why: Main function to convert HTML report templates to PDF documents.
+ * Always closes browser after use to avoid Browserless concurrency limits.
  */
 export async function generatePDF(options: PDFGeneratorOptions): Promise<Buffer> {
   const {
@@ -149,20 +140,28 @@ export async function generatePDF(options: PDFGeneratorOptions): Promise<Buffer>
     displayHeaderFooter = false,
   } = options;
 
-  const browser = await getBrowser();
-  const page: Page = await browser.newPage();
+  let browser: Browser | null = null;
+  let page: Page | null = null;
 
   try {
+    browser = await getBrowser();
+    page = await browser.newPage();
+
+    // Set viewport for high-quality rendering
+    await page.setViewport({
+      width: 794,
+      height: 1123,
+      deviceScaleFactor: 2,
+    });
+
     // Set content and wait for network (including Chart.js CDN)
     await page.setContent(html, {
       waitUntil: 'networkidle0',
     });
 
     // Wait for Chart.js to fully render (if present)
-    // Longer wait ensures high-quality canvas rendering
     await page.evaluate(() => {
       return new Promise<void>((resolve) => {
-        // Give Chart.js more time to render at high resolution
         setTimeout(resolve, 1000);
       });
     });
@@ -175,14 +174,21 @@ export async function generatePDF(options: PDFGeneratorOptions): Promise<Buffer>
       displayHeaderFooter,
       headerTemplate: headerTemplate || '',
       footerTemplate: footerTemplate || '',
-      scale: 1, // Use 1 for crisp text (deviceScaleFactor handles resolution)
+      scale: 1,
       preferCSSPageSize: false,
     });
 
-    // Convert Uint8Array to Buffer for Node.js compatibility
     return Buffer.from(pdfBuffer);
   } finally {
-    await page.close();
+    // Always close page and browser to free Browserless resources
+    if (page) {
+      try {
+        await page.close();
+      } catch {
+        // Page may already be closed
+      }
+    }
+    await closeBrowser(browser);
   }
 }
 
