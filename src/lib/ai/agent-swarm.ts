@@ -133,8 +133,9 @@ The header follows this EXACT layout - extract each field from its labeled posit
 ## DATE FORMAT RULES
 - Input may be: DD-MM-YY, DD/MM/YY, D/M/YY, DD-MM-YYYY
 - Output MUST be: YYYY-MM-DD (ISO format)
-- Example: "11-9-25" → "2025-09-11" (11 Sept 2025)
-- Example: "9/12/25" → "2025-12-09" (9 Dec 2025)
+- IMPORTANT: The year is ALWAYS 2026 (or "26" in 2-digit format)
+- Example: "11-9-26" → "2026-09-11" (11 Sept 2026)
+- Example: "9/12/26" → "2026-12-09" (9 Dec 2026)
 
 ## OUTPUT FORMAT
 Return ONLY valid JSON (no markdown):
@@ -152,8 +153,8 @@ Return ONLY valid JSON (no markdown):
   "testLoad": 1050,
   "ramArea": 2551,
   "concreteGrade": "M40",
-  "testDate": "2025-12-09",
-  "dateOfCasting": "2025-09-11",
+  "testDate": "2026-12-09",
+  "dateOfCasting": "2026-09-11",
   "testType": "IVPLT",
   "lcDialGauge": "0.01"
 }
@@ -172,7 +173,7 @@ Extract ALL readings from these field sheet pages into a single sequential list.
 ## TABLE COLUMNS (left to right)
 | Column | Description | Examples |
 |--------|-------------|----------|
-| DATE | Date in DD/MM/YY format | 9/12/25, 10/12/25 |
+| DATE | Date in DD/MM/YY format | 9/12/26, 10/12/26 |
 | TIME | Time in HH:MM 24-hour format | 11:29, 14:30 |
 | PRESSURE | Gauge reading in kg/cm² | 0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 420 |
 | LOAD IN MT | Calculated load (skip - we calculate from pressure) | |
@@ -220,7 +221,8 @@ Row 12: pressure=160, dg1=1.35, dg2=1.26, dg3=0.35, dg4=1.27 ← dg3=0.35 is WRO
 
 ## DATE FORMAT RULES
 - Output dates in YYYY-MM-DD format
-- "9/12/25" → "2025-12-09" (9 December 2025)
+- IMPORTANT: The year is ALWAYS 2026 (or "26" in 2-digit format)
+- "9/12/26" → "2026-12-09" (9 December 2026)
 - If date is same as previous row, you can copy it
 
 ## PHASE DETECTION
@@ -291,13 +293,13 @@ function normalizeDateToISO(dateStr: string | undefined): string | undefined {
     return `${dmyMatch[3]}-${month}-${day}`;
   }
   
-  // Try D/M/YY or DD/MM/YY (2-digit year) - assume 2000s
+  // Try D/M/YY or DD/MM/YY (2-digit year) - always use 2026
   const shortYearMatch = dateStr.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2})$/);
   if (shortYearMatch) {
     const day = shortYearMatch[1].padStart(2, '0');
     const month = shortYearMatch[2].padStart(2, '0');
-    const year = 2000 + parseInt(shortYearMatch[3]);
-    return `${year}-${month}-${day}`;
+    // All pile test data is from 2026
+    return `2026-${month}-${day}`;
   }
   
   return dateStr; // Return original if can't parse
