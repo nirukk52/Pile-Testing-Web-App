@@ -15,6 +15,17 @@ const BROWSERLESS_API_KEY = process.env.BROWSERLESS_API_KEY;
 const BROWSERLESS_ENDPOINT = `wss://production-sfo.browserless.io?token=${BROWSERLESS_API_KEY}`;
 
 /**
+ * Helper to add timeout to a promise.
+ * Why: Fail fast if Browserless connection hangs.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage: string): Promise<T> {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(errorMessage)), ms)
+  );
+  return Promise.race([promise, timeout]);
+}
+
+/**
  * Get a browser instance.
  * Why: Connects to Browserless.io in production for reliable PDF generation.
  * Uses local Chrome for development. Does NOT reuse connections to avoid stale sessions.
@@ -30,9 +41,22 @@ async function getBrowser(): Promise<Browser> {
   if (BROWSERLESS_API_KEY) {
     // Production: Connect to Browserless.io hosted Chrome
     console.log('[PDF Generator] Connecting to Browserless.io...');
-    return await puppeteer.connect({
-      browserWSEndpoint: BROWSERLESS_ENDPOINT,
-    });
+    console.log('[PDF Generator] API Key present:', BROWSERLESS_API_KEY ? 'Yes (length: ' + BROWSERLESS_API_KEY.length + ')' : 'No');
+    
+    try {
+      const browser = await withTimeout(
+        puppeteer.connect({
+          browserWSEndpoint: BROWSERLESS_ENDPOINT,
+        }),
+        15000, // 15 second timeout for connection
+        'Browserless connection timed out after 15 seconds'
+      );
+      console.log('[PDF Generator] Successfully connected to Browserless.io');
+      return browser;
+    } catch (error) {
+      console.error('[PDF Generator] Failed to connect to Browserless:', error);
+      throw new Error(`Browserless connection failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   // Local development: Use local Chrome
