@@ -32,6 +32,7 @@ export interface ApiTest {
   projectId: string;
   testType: TestType;
   reportNo: string | null;
+  slug: string | null; // URL-friendly identifier for shareable links
   testDate: string;
   dateOfCasting: string | null;
   pileId: string;
@@ -155,6 +156,7 @@ export async function createTest(data: {
   pileDepthM: number;
   concreteGrade: string;
   designLoadT: number;
+  testLoadT?: number; // Optional manual override - auto-calculated if not provided
   jackName?: string;
   ramAreaCm2: number;
   gaugeLeastCountMm?: number;

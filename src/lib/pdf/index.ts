@@ -7,5 +7,7 @@ export { generatePDF, generatePDFWithPageNumbers, closeBrowser } from './generat
 export type { PDFGeneratorOptions } from './generator';
 export { generateIvpltReportHtml } from './templates/ivplt-template';
 export type { IvpltReportData } from './templates/ivplt-template';
+export { generateChartScript, processReadingsForChart } from './chart-generator';
+export type { ProcessedChartData } from './chart-generator';
 
 

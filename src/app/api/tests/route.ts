@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getTestEngine } from '@/engines';
 import type { TestType } from '@/engines';
+import { generateTestSlug } from '@/lib/slug';
 
 /**
  * GET /api/tests - List all tests with optional filtering
@@ -67,6 +68,7 @@ export async function POST(request: NextRequest) {
       pileDepthM,
       concreteGrade,
       designLoadT,
+      testLoadT: providedTestLoadT, // Optional manual override
       jackName,
       ramAreaCm2,
       gaugeLeastCountMm = 0.01,
@@ -80,15 +82,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get engine to calculate test load
-    const engine = getTestEngine(testType as TestType);
-    const testLoadT = engine.calculateTestLoad(parseFloat(designLoadT));
+    // Use provided testLoadT if valid, otherwise auto-calculate from engine
+    let testLoadT: number;
+    if (providedTestLoadT !== undefined && providedTestLoadT !== null && !isNaN(parseFloat(providedTestLoadT))) {
+      testLoadT = parseFloat(providedTestLoadT);
+    } else {
+      const engine = getTestEngine(testType as TestType);
+      testLoadT = engine.calculateTestLoad(parseFloat(designLoadT));
+    }
+
+    // Fetch project name for slug generation
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { name: true },
+    });
+
+    if (!project) {
+      return NextResponse.json(
+        { error: 'Project not found' },
+        { status: 404 }
+      );
+    }
+
+    // Generate base slug from project name + report number (or pile ID + test type)
+    let slug = generateTestSlug(project.name, pileId, testType, reportNo || null);
+
+    // Ensure slug uniqueness by appending a counter if needed
+    let slugExists = await prisma.test.findFirst({ where: { slug } });
+    let counter = 1;
+    while (slugExists) {
+      slug = `${generateTestSlug(project.name, pileId, testType, reportNo || null)}-${counter}`;
+      slugExists = await prisma.test.findFirst({ where: { slug } });
+      counter++;
+    }
 
     const test = await prisma.test.create({
       data: {
         projectId,
         testType: testType as TestType,
         reportNo: reportNo || null,
+        slug,
         testDate: testDate ? new Date(testDate) : new Date(),
         dateOfCasting: dateOfCasting ? new Date(dateOfCasting) : null,
         pileId,

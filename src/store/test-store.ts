@@ -434,6 +434,7 @@ export const useTestStore = create<TestState & TestActions>()((set, get) => ({
           pileDepthM: parseFloat(projectInfo.pileDepth) || 10,
           concreteGrade: projectInfo.mixedDesign || 'M25',
           designLoadT: parseFloat(projectInfo.designLoadOnPile) || 0,
+          testLoadT: projectInfo.testLoad ? parseFloat(projectInfo.testLoad) : undefined,
           jackName: projectInfo.jackName || undefined,
           ramAreaCm2: parseFloat(projectInfo.ramArea) || 71.26,
           gaugeLeastCountMm: parseFloat(projectInfo.lcOfDialGauge) || 0.01,
@@ -446,7 +447,7 @@ export const useTestStore = create<TestState & TestActions>()((set, get) => ({
           currentTestId: testId,
         });
       } else {
-        // Update existing test
+        // Update existing test - always send testLoadT to allow manual overrides
         await api.updateTest(testId, {
           reportNo: projectInfo.reportNo || null,
           testDate: projectInfo.testDate || undefined,
@@ -456,6 +457,7 @@ export const useTestStore = create<TestState & TestActions>()((set, get) => ({
           pileDepthM: parseFloat(projectInfo.pileDepth) || 10,
           concreteGrade: projectInfo.mixedDesign || 'M25',
           designLoadT: parseFloat(projectInfo.designLoadOnPile) || 0,
+          testLoadT: projectInfo.testLoad ? parseFloat(projectInfo.testLoad) : undefined,
           jackName: projectInfo.jackName || null,
           ramAreaCm2: parseFloat(projectInfo.ramArea) || 71.26,
           gaugeLeastCountMm: parseFloat(projectInfo.lcOfDialGauge) || 0.01,

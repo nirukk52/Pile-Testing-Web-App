@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ChevronRight, Calculator, Loader2, CloudOff, Check, AlertTriangle } from 'lucide-react';
+import { ChevronRight, Calculator, Loader2, CloudOff, Check, AlertTriangle, Pencil, RotateCcw } from 'lucide-react';
 import type { LegacyProjectInfo, ExtractedProjectInfo } from '@/types';
 import { TEST_TYPES } from '@/types';
 import { useApiSync, useTestStore } from '@/store/test-store';
@@ -71,6 +71,8 @@ export function ProjectDetails({
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [dismissedWarning, setDismissedWarning] = useState(false);
+  /** Whether user is manually editing test load instead of auto-calculating */
+  const [isTestLoadManual, setIsTestLoadManual] = useState(false);
 
   const handleChange = (field: keyof LegacyProjectInfo, value: string) => {
     onUpdateField(field, value as LegacyProjectInfo[typeof field]);
@@ -118,8 +120,10 @@ export function ProjectDetails({
     }
   };
 
-  // Auto-calculate test load when design load changes
+  // Auto-calculate test load when design load changes (only if not in manual mode)
   useEffect(() => {
+    if (isTestLoadManual) return; // Don't auto-calculate when user is manually editing
+    
     if (projectInfo.designLoadOnPile) {
       const designLoad = parseFloat(projectInfo.designLoadOnPile);
       if (!isNaN(designLoad) && designLoad > 0) {
@@ -129,7 +133,31 @@ export function ProjectDetails({
         }
       }
     }
-  }, [projectInfo.designLoadOnPile, loadMultiplier, projectInfo.testLoad, onUpdateField]);
+  }, [projectInfo.designLoadOnPile, loadMultiplier, projectInfo.testLoad, onUpdateField, isTestLoadManual]);
+
+  /**
+   * Gets the auto-calculated test load value.
+   * Why: Shows user what the calculated value would be when in manual mode.
+   */
+  const getCalculatedTestLoad = (): string => {
+    const designLoad = parseFloat(projectInfo.designLoadOnPile);
+    if (!isNaN(designLoad) && designLoad > 0) {
+      return (designLoad * loadMultiplier).toFixed(2);
+    }
+    return '';
+  };
+
+  /**
+   * Reset test load to auto-calculated value.
+   * Why: Allows user to switch back from manual override to auto-calculation.
+   */
+  const resetToAutoCalculated = () => {
+    setIsTestLoadManual(false);
+    const calculatedValue = getCalculatedTestLoad();
+    if (calculatedValue) {
+      onUpdateField('testLoad', calculatedValue);
+    }
+  };
 
   const isFormValid = () => {
     return (
@@ -437,18 +465,62 @@ export function ProjectDetails({
           </div>
         </div>
 
-        {/* Auto-calculated Test Load */}
-        {projectInfo.designLoadOnPile && projectInfo.testLoad && (
-          <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Calculator className="w-5 h-5 text-blue-600" />
-                <span className="text-blue-700">
-                  Test Load ({loadMultiplier}× Design Load):
-                </span>
+        {/* Test Load - Auto-calculated or Manual */}
+        {projectInfo.designLoadOnPile && (
+          <div className={`rounded-lg p-4 border ${isTestLoadManual ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200'}`}>
+            {isTestLoadManual ? (
+              // Manual edit mode
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Pencil className="w-5 h-5 text-amber-600" />
+                    <span className="text-amber-700 font-medium">Manual Test Load Override</span>
+                  </div>
+                  <button
+                    onClick={resetToAutoCalculated}
+                    className="flex items-center gap-1 text-sm text-amber-700 hover:text-amber-900 transition-colors"
+                    title="Reset to auto-calculated value"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Reset</span>
+                  </button>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={projectInfo.testLoad}
+                    onChange={(e) => handleChange('testLoad', e.target.value)}
+                    className="flex-1 h-12 px-4 rounded-lg border border-amber-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 outline-none transition-all text-slate-900 font-semibold text-lg"
+                    placeholder="Enter test load"
+                  />
+                  <span className="text-amber-900 font-medium">MT</span>
+                </div>
+                <p className="text-xs text-amber-600">
+                  Auto-calculated: {getCalculatedTestLoad()} MT ({loadMultiplier}× Design Load)
+                </p>
               </div>
-              <span className="text-blue-900 font-bold text-lg">{projectInfo.testLoad} MT</span>
-            </div>
+            ) : (
+              // Auto-calculated mode (default)
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Calculator className="w-5 h-5 text-blue-600" />
+                  <span className="text-blue-700">
+                    Test Load ({loadMultiplier}× Design Load):
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-blue-900 font-bold text-lg">{projectInfo.testLoad} MT</span>
+                  <button
+                    onClick={() => setIsTestLoadManual(true)}
+                    className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-lg transition-colors"
+                    title="Edit test load manually"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

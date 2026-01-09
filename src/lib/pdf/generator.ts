@@ -25,6 +25,15 @@ async function getBrowser(): Promise<Browser> {
     return browserInstance;
   }
 
+  // High-quality viewport for crisp PDF rendering
+  // deviceScaleFactor: 2 gives retina-quality output
+  // A4 aspect ratio approximately 1:1.414
+  const highQualityViewport = { 
+    width: 794,  // A4 width at 96 DPI
+    height: 1123, // A4 height at 96 DPI
+    deviceScaleFactor: 2 
+  };
+
   if (isServerless) {
     // Serverless environment (Vercel)
     // @sparticuz/chromium types may be incomplete, so we use type assertions
@@ -32,7 +41,7 @@ async function getBrowser(): Promise<Browser> {
     
     browserInstance = await puppeteer.launch({
       args: chromium.args,
-      defaultViewport: { width: 1920, height: 1080 },
+      defaultViewport: highQualityViewport,
       executablePath: execPath,
       headless: true,
     });
@@ -74,6 +83,7 @@ async function getBrowser(): Promise<Browser> {
     browserInstance = await puppeteer.launch({
       headless: true,
       executablePath,
+      defaultViewport: highQualityViewport,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
   }
@@ -148,15 +158,16 @@ export async function generatePDF(options: PDFGeneratorOptions): Promise<Buffer>
       waitUntil: 'networkidle0',
     });
 
-    // Wait for Chart.js to render (if present)
+    // Wait for Chart.js to fully render (if present)
+    // Longer wait ensures high-quality canvas rendering
     await page.evaluate(() => {
       return new Promise<void>((resolve) => {
-        // Give Chart.js time to render after script loads
-        setTimeout(resolve, 500);
+        // Give Chart.js more time to render at high resolution
+        setTimeout(resolve, 1000);
       });
     });
 
-    // Generate PDF
+    // Generate high-quality PDF
     const pdfBuffer = await page.pdf({
       format,
       printBackground,
@@ -164,6 +175,8 @@ export async function generatePDF(options: PDFGeneratorOptions): Promise<Buffer>
       displayHeaderFooter,
       headerTemplate: headerTemplate || '',
       footerTemplate: footerTemplate || '',
+      scale: 1, // Use 1 for crisp text (deviceScaleFactor handles resolution)
+      preferCSSPageSize: false,
     });
 
     // Convert Uint8Array to Buffer for Node.js compatibility

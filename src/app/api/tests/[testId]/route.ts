@@ -62,8 +62,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { testId } = await params;
     const body = await request.json();
 
-    // If design load is being updated, recalculate test load
-    if (body.designLoadT) {
+    // Check if testLoadT was explicitly provided (manual override)
+    const hasExplicitTestLoad = body.testLoadT !== undefined && body.testLoadT !== null;
+
+    // Only auto-calculate testLoadT if designLoadT is being updated AND no explicit testLoadT was provided
+    if (body.designLoadT && !hasExplicitTestLoad) {
       const existingTest = await prisma.test.findUnique({
         where: { id: testId },
         select: { testType: true },

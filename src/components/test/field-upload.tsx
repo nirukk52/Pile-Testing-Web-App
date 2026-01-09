@@ -96,8 +96,20 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Extraction failed');
+        // Try to parse as JSON, but handle case where response is plain text (e.g., Vercel error)
+        const contentType = response.headers.get('content-type');
+        let errorMessage = 'Extraction failed';
+        
+        if (contentType?.includes('application/json')) {
+          const errorData = await response.json();
+          errorMessage = errorData.error || 'Extraction failed';
+        } else {
+          // Plain text error (common on Vercel when serverless function fails)
+          const text = await response.text();
+          errorMessage = text.substring(0, 200) || `HTTP ${response.status}: Extraction failed`;
+        }
+        
+        throw new Error(errorMessage);
       }
       
       const result: AgentSwarmResult = await response.json();
