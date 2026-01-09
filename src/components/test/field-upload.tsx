@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, ChevronDown, ChevronRight, Database, Cloud } from 'lucide-react';
 import type { AgentSwarmResult } from '@/lib/ai/agent-swarm';
 import { useTestStore, useApiSync } from '@/store/test-store';
@@ -29,6 +29,7 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
   const [saveProgress, setSaveProgress] = useState({ current: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [shouldAutoSave, setShouldAutoSave] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Use store for extraction result persistence (survives tab navigation)
@@ -39,6 +40,18 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
   
   // API sync methods for saving to database
   const { saveTestToApi, addReadingsBatchToApi } = useApiSync();
+
+  /**
+   * Auto-save effect: Saves field readings to database after extraction.
+   * Why: Provides automatic persistence without requiring manual button click.
+   */
+  useEffect(() => {
+    if (shouldAutoSave && loadEntries.length > 0 && !isSavingToDb && !savedToDb) {
+      setShouldAutoSave(false);
+      handleSaveToDatabase();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldAutoSave, loadEntries.length, isSavingToDb, savedToDb]);
 
   /**
    * Handles file selection from dropzone or file input.
@@ -79,6 +92,8 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
 
   /**
    * Runs the Agent Swarm extraction on the uploaded file.
+   * Why: Parses field sheet PDF and extracts readings + project info.
+   * After extraction, auto-saves the readings to the database.
    */
   const handleSubmit = async () => {
     if (!file) return;
@@ -115,8 +130,12 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
       const result: AgentSwarmResult = await response.json();
       setExtractionResult(result);
       
-      // Auto-apply the extracted data
+      // Auto-apply the extracted data to the store
       applyExtractedData(result);
+      
+      // Auto-save: Trigger database save after extraction
+      // This will be handled by the auto-save effect below
+      setShouldAutoSave(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Extraction failed');
       console.error('Extraction error:', err);
@@ -351,7 +370,7 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
         </div>
       )}
 
-      {/* Submit Button */}
+      {/* Extract PDF Button with BETA badge */}
       {file && !extractionResult && (
         <button
           onClick={handleSubmit}
@@ -360,8 +379,8 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
             w-full py-5 rounded-2xl font-bold text-xl transition-all
             flex items-center justify-center gap-3
             ${isExtracting 
-              ? 'bg-blue-400 text-white cursor-wait' 
-              : 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 shadow-lg'
+              ? 'bg-purple-400 text-white cursor-wait' 
+              : 'bg-purple-600 text-white hover:bg-purple-700 active:bg-purple-800 shadow-lg'
             }
           `}
         >
@@ -373,7 +392,10 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
           ) : (
             <>
               <Upload className="w-6 h-6" />
-              <span>Extract Data</span>
+              <span>Extract PDF</span>
+              <span className="ml-2 px-2 py-0.5 text-xs font-semibold bg-amber-400 text-amber-900 rounded-full">
+                BETA
+              </span>
             </>
           )}
         </button>
@@ -464,7 +486,7 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
             </div>
           )}
 
-          {/* Save to Database Button */}
+          {/* Save Field Reading Button - Primary CTA */}
           {!savedToDb ? (
             <button
               onClick={handleSaveToDatabase}
@@ -472,8 +494,8 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
               className={`
                 w-full py-5 rounded-2xl font-bold text-xl transition-all shadow-lg flex items-center justify-center gap-3
                 ${isSavingToDb 
-                  ? 'bg-blue-400 text-white cursor-wait' 
-                  : 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'
+                  ? 'bg-green-400 text-white cursor-wait' 
+                  : 'bg-green-600 text-white hover:bg-green-700 active:bg-green-800'
                 }
                 ${loadEntries.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}
               `}
@@ -486,7 +508,7 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
               ) : (
                 <>
                   <Database className="w-6 h-6" />
-                  <span>Save Readings to Database</span>
+                  <span>Save Field Reading</span>
                 </>
               )}
             </button>
@@ -494,17 +516,17 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
             <div className="bg-green-50 border-2 border-green-300 rounded-2xl p-5 flex items-center justify-center gap-3">
               <Cloud className="w-6 h-6 text-green-600" />
               <span className="font-bold text-xl text-green-700">
-                {loadEntries.length} Readings Saved to Database ✓
+                {loadEntries.length} Field Readings Saved ✓
               </span>
             </div>
           )}
 
-          {/* Continue Button */}
+          {/* Continue Button - Secondary action after save */}
           <button
             onClick={handleContinue}
-            className="w-full py-5 rounded-2xl font-bold text-xl bg-green-600 text-white hover:bg-green-700 active:bg-green-800 transition-all shadow-lg flex items-center justify-center gap-3"
+            className="w-full py-4 rounded-2xl font-semibold text-lg bg-slate-100 text-slate-700 hover:bg-slate-200 active:bg-slate-300 transition-all border border-slate-300 flex items-center justify-center gap-3"
           >
-            <CheckCircle2 className="w-6 h-6" />
+            <CheckCircle2 className="w-5 h-5" />
             <span>Continue to Details</span>
           </button>
         </div>
