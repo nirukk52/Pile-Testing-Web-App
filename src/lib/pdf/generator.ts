@@ -178,15 +178,28 @@ export async function generatePDF(options: PDFGeneratorOptions): Promise<Buffer>
       deviceScaleFactor: 2,
     });
 
-    // Set content and wait for network (including Chart.js CDN)
+    // Set content with longer timeout for serverless environments
+    // Use 'domcontentloaded' first, then wait for images separately
+    console.log('[PDF Generator] Setting page content...');
     await page.setContent(html, {
-      waitUntil: 'networkidle0',
+      waitUntil: 'domcontentloaded',
+      timeout: 45000, // 45 seconds for initial content load
     });
+    
+    // Wait for any remaining network requests (images, fonts) with a shorter timeout
+    // This is more lenient than networkidle0 which can hang indefinitely
+    console.log('[PDF Generator] Waiting for network to settle...');
+    try {
+      await page.waitForNetworkIdle({ timeout: 10000, idleTime: 500 });
+    } catch {
+      console.log('[PDF Generator] Network did not fully settle, proceeding anyway...');
+    }
 
     // Wait for Chart.js to fully render (if present)
+    console.log('[PDF Generator] Waiting for charts to render...');
     await page.evaluate(() => {
       return new Promise<void>((resolve) => {
-        setTimeout(resolve, 1000);
+        setTimeout(resolve, 1500);
       });
     });
 
