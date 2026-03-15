@@ -1,0 +1,23 @@
+{
+  "skill_name": "piletest-parity",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Generate IVPLT report from field sheet and match expected report with verifier >= 90.",
+      "expected_output": "Generated report score >= 90 with no critical failures.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Given known date ambiguity (DD/MM), ensure dates are normalized day-first throughout observation sheet and metadata.",
+      "expected_output": "No month/day inversion in generated report.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Given unloading repeated-pressure rows, ensure phase mapping does not contaminate loading summary values.",
+      "expected_output": "Loading table starts at 0.00 and follows loading values; unloading table follows unloading values only.",
+      "files": []
+    }
+  ]
+}
