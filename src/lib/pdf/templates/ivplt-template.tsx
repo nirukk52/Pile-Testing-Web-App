@@ -1202,12 +1202,22 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
             </thead>
             <tbody>
               ${(() => {
-                const loadingReadings = readings.filter(r => r.phase === 'LOADING' || r.phase === 'HOLD');
+                // Loading table should use only LOADING rows, plus final HOLD row at max load.
+                const loadingOnly = readings.filter(r => r.phase === 'LOADING');
                 const loadingByLoad: Record<string, number> = {};
-                loadingReadings.forEach(r => {
+                loadingOnly.forEach(r => {
                   const loadKey = r.loadT.toFixed(2);
                   loadingByLoad[loadKey] = r.avgSettlementMm;
                 });
+
+                // Replace max-load point with end-of-hold value when HOLD exists.
+                const holdRows = readings.filter(r => r.phase === 'HOLD');
+                if (holdRows.length > 0) {
+                  const maxLoad = Math.max(...loadingOnly.map(r => r.loadT));
+                  const endHold = holdRows[holdRows.length - 1];
+                  loadingByLoad[maxLoad.toFixed(2)] = endHold.avgSettlementMm;
+                }
+
                 const loadingData = Object.entries(loadingByLoad)
                   .map(([load, settlement]) => ({ load: parseFloat(load), settlement }))
                   .sort((a, b) => a.load - b.load);

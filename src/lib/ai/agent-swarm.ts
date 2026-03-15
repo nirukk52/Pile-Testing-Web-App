@@ -133,9 +133,11 @@ The header follows this EXACT layout - extract each field from its labeled posit
 ## DATE FORMAT RULES
 - Input may be: DD-MM-YY, DD/MM/YY, D/M/YY, DD-MM-YYYY
 - Output MUST be: YYYY-MM-DD (ISO format)
+- IMPORTANT: Parse all dates as DAY-FIRST (Indian format: DD/MM/YYYY)
 - IMPORTANT: The year is ALWAYS 2026 (or "26" in 2-digit format)
 - Example: "11-9-26" → "2026-09-11" (11 Sept 2026)
 - Example: "9/12/26" → "2026-12-09" (9 Dec 2026)
+- Example: "06/01/26" → "2026-01-06" (6 Jan 2026) and NEVER "2026-11-06"
 
 ## OUTPUT FORMAT
 Return ONLY valid JSON (no markdown):
@@ -602,6 +604,42 @@ async function runReadingsAgent(
 // =============================================================================
 
 /**
+ * Normalize phase labels based on pressure trend.
+ * Why: Model often labels repeated-pressure rows during unloading as "holding".
+ * Rule:
+ * - Before first pressure drop from max pressure: LOADING (except max-pressure plateau = HOLD)
+ * - At max pressure plateau: HOLD
+ * - After first pressure drop from max pressure: UNLOADING (including repeated-pressure rows)
+ */
+function normalizePhases(rawReadings: RawReading[]): RawReading[] {
+  if (rawReadings.length === 0) return rawReadings;
+
+  const maxPressure = Math.max(...rawReadings.map((r) => r.pressure ?? 0));
+  let unloadingStarted = false;
+  let previousPressure = rawReadings[0].pressure ?? 0;
+
+  return rawReadings.map((r, i) => {
+    const pressure = r.pressure ?? 0;
+
+    if (i > 0 && pressure < previousPressure && previousPressure === maxPressure) {
+      unloadingStarted = true;
+    }
+
+    let phase: 'loading' | 'holding' | 'unloading';
+    if (unloadingStarted) {
+      phase = 'unloading';
+    } else if (pressure === maxPressure) {
+      phase = 'holding';
+    } else {
+      phase = 'loading';
+    }
+
+    previousPressure = pressure;
+    return { ...r, phase };
+  });
+}
+
+/**
  * Verifies and enriches readings with confidence scores.
  * Why: Validates avgSettlement and adds confidence metadata.
  */
@@ -613,7 +651,9 @@ function verifyReadings(
   const AVG_TOLERANCE = 0.05; // ±0.05mm tolerance
   let lowConfidenceCount = 0;
 
-  const verified: ExtractedReadingWithConfidence[] = rawReadings.map((r, index) => {
+  const normalizedReadings = normalizePhases(rawReadings);
+
+  const verified: ExtractedReadingWithConfidence[] = normalizedReadings.map((r, index) => {
     const dg1 = r.dg1 ?? 0;
     const dg2 = r.dg2 ?? 0;
     const dg3 = r.dg3 ?? 0;
