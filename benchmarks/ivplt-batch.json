@@ -1,0 +1,58 @@
+{
+  "benchmark_name": "ivplt-calibration-batch",
+  "version": "1.0.0",
+  "description": "Calibration set of input/expected IVPLT report pairs for generate->verify parity loops.",
+  "defaults": {
+    "testType": "IVPLT",
+    "verifierThreshold": 90,
+    "parityTarget": 100
+  },
+  "cases": [
+    {
+      "id": "tp-01-prestige-nautilus",
+      "slug": "tp-01-prestige-nautilus",
+      "enabled": true,
+      "files": {
+        "input": "/Users/priyankalalge/.openclaw/workspace-piletest/generated-reports/batches/tp-01-prestige-nautilus/tp-01-ivplt-field-sheet-input.pdf",
+        "expected": "/Users/priyankalalge/.openclaw/workspace-piletest/generated-reports/batches/tp-01-prestige-nautilus/tp-01-ivplt-reference-report.pdf"
+      },
+      "metadata": {
+        "reportNo": "IVPLT-03",
+        "officialTestDate": "06/01/2026",
+        "pileDepthM": 10,
+        "concreteGrade": "M25",
+        "projectName": "Prestige Nautilus Worli",
+        "location": "Rehab SRA Plot B",
+        "client": "Prestige",
+        "contractor": "L&T"
+      },
+      "notes": [
+        "Historical calibration case with known phase/date edge cases.",
+        "Use for regression on loading/unloading summary integrity."
+      ]
+    },
+    {
+      "id": "tp-01-bdd-no-3",
+      "slug": "tp-01-bdd-no-3",
+      "enabled": true,
+      "files": {
+        "input": "/Users/priyankalalge/.openclaw/workspace-piletest/generated-reports/batches/tp-01-bdd-no-3/tp-01-bdd-ivplt-field-sheet-input.pdf",
+        "expected": "/Users/priyankalalge/.openclaw/workspace-piletest/generated-reports/batches/tp-01-bdd-no-3/tp-01-bdd-ivplt-reference-report.pdf"
+      },
+      "metadata": {
+        "reportNo": "IVPLT-001",
+        "officialTestDate": "09/12/2025",
+        "pileDepthM": 11.51,
+        "concreteGrade": "M40",
+        "projectName": "BDD Chawls Redevelopment Project, Worli, Mumbai",
+        "location": "Building-3 Wing B",
+        "client": "Tata Project",
+        "contractor": "NA"
+      },
+      "notes": [
+        "Calibration case with long hold phase and stabilized final unload endpoint.",
+        "Use for final-settlement selection regression."
+      ]
+    }
+  ]
+}
