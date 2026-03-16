@@ -9,8 +9,8 @@ import { getTestEngine } from '@/engines';
 import type { TestType, ReadingInput, TestMeta } from '@/engines';
 import { generatePDFWithPageNumbers } from '@/lib/pdf/generator';
 import { generateIvpltReportHtml, type IvpltReportData } from '@/lib/pdf/templates/ivplt-template';
-import { getPublicUrl, STORAGE_BUCKETS } from '@/lib/supabase';
-import { mergePdfsFromSupabase } from '@/lib/pdf/merge';
+import { getPublicUrl, STORAGE_BUCKETS } from '@/lib/storage';
+import { mergePdfs } from '@/lib/pdf/merge';
 
 interface RouteParams {
   params: Promise<{ testId: string }>;
@@ -153,18 +153,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const fieldReadingsForMerge = test.fieldReadings.map((fr) => ({
         storagePath: fr.storagePath,
       }));
-      pdfBuffer = await mergePdfsFromSupabase(pdfBuffer, fieldReadingsForMerge);
+      pdfBuffer = await mergePdfs(pdfBuffer, fieldReadingsForMerge);
     }
 
-    // Merge calibration certificate PDFs if any exist using authenticated Supabase download
     if (test.certificates.length > 0) {
       const certificatesForMerge = test.certificates.map((cert) => ({
         storagePath: cert.storagePath,
       }));
-      pdfBuffer = await mergePdfsFromSupabase(pdfBuffer, certificatesForMerge, 'certificates');
+      pdfBuffer = await mergePdfs(pdfBuffer, certificatesForMerge, 'certificates');
     }
 
-    // Build filename
     const dateStr = test.testDate.toISOString().split('T')[0];
     const filename = `${test.pileId}_${test.testType}_${dateStr}_Report.pdf`;
 
@@ -327,18 +325,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const fieldReadingsForMerge = test.fieldReadings.map((fr) => ({
         storagePath: fr.storagePath,
       }));
-      pdfBuffer = await mergePdfsFromSupabase(pdfBuffer, fieldReadingsForMerge);
+      pdfBuffer = await mergePdfs(pdfBuffer, fieldReadingsForMerge);
     }
 
-    // Merge calibration certificate PDFs if any exist using authenticated Supabase download
     if (test.certificates.length > 0) {
       const certificatesForMerge = test.certificates.map((cert) => ({
         storagePath: cert.storagePath,
       }));
-      pdfBuffer = await mergePdfsFromSupabase(pdfBuffer, certificatesForMerge, 'certificates');
+      pdfBuffer = await mergePdfs(pdfBuffer, certificatesForMerge, 'certificates');
     }
 
-    // Build filename
     const dateStr = test.testDate.toISOString().split('T')[0];
     const filename = `${test.pileId}_${test.testType}_${dateStr}_Report.pdf`;
 

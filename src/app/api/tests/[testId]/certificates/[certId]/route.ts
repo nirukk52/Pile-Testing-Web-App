@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { getSupabase, STORAGE_BUCKETS, getPublicUrl } from '@/lib/supabase';
+import { deleteFile, getPublicUrl, STORAGE_BUCKETS } from '@/lib/storage';
 
 interface RouteParams {
   params: Promise<{ testId: string; certId: string }>;
@@ -22,7 +22,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       where: { id: certId },
     });
 
-    // Validate certificate exists and belongs to this test
     if (!certificate || certificate.testId !== testId) {
       return NextResponse.json({ error: 'Certificate not found' }, { status: 404 });
     }
@@ -52,17 +51,12 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       select: { testId: true, storagePath: true },
     });
 
-    // Validate certificate exists and belongs to this test
     if (!certificate || certificate.testId !== testId) {
       return NextResponse.json({ error: 'Certificate not found' }, { status: 404 });
     }
 
-    // Delete from storage
-    await getSupabase().storage
-      .from(STORAGE_BUCKETS.CERTIFICATES)
-      .remove([certificate.storagePath]);
+    await deleteFile(STORAGE_BUCKETS.CERTIFICATES, certificate.storagePath);
 
-    // Delete from database
     await prisma.calibrationCertificate.delete({
       where: { id: certId },
     });

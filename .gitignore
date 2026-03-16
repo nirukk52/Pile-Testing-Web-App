@@ -96,3 +96,7 @@ Thumbs.db
 !project_info_and_context/lateral-test-data/*.png
 *.png
 ocr-server/.env
+
+# Local file storage (replaces Supabase Storage)
+/uploads/
+/generated/

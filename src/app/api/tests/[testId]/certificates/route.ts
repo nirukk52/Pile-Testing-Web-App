@@ -1,12 +1,11 @@
 /**
  * Calibration Certificates API Route
  * Why: CRUD operations for test calibration certificates (IS 2911 compliance).
- * Simple: just upload PDFs, no complex categorization.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { getSupabase, STORAGE_BUCKETS, getPublicUrl } from '@/lib/supabase';
+import { uploadFile, getPublicUrl, STORAGE_BUCKETS } from '@/lib/storage';
 
 interface RouteParams {
   params: Promise<{ testId: string }>;
@@ -30,7 +29,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       orderBy: { createdAt: 'asc' },
     });
 
-    // Add public URLs
     const certificatesWithUrls = certificates.map((cert) => ({
       ...cert,
       url: getPublicUrl(STORAGE_BUCKETS.CERTIFICATES, cert.storagePath),
@@ -54,7 +52,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { testId } = await params;
 
-    // Verify test exists
     const test = await prisma.test.findUnique({
       where: { id: testId },
       select: { id: true },
@@ -64,7 +61,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Test not found' }, { status: 404 });
     }
 
-    // Check certificate count
     const currentCount = await prisma.calibrationCertificate.count({
       where: { testId },
     });
@@ -76,7 +72,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Parse form data
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
 
@@ -84,7 +79,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    // Validate file type (PDF only)
     if (file.type !== 'application/pdf') {
       return NextResponse.json(
         { error: 'Only PDF files are allowed' },
@@ -92,7 +86,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Validate file size
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
         { error: `File too large. Maximum: ${MAX_FILE_SIZE / 1024 / 1024}MB` },
@@ -100,33 +93,28 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Generate storage path
     const timestamp = Date.now();
     const safeFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
     const storagePath = `${testId}/${timestamp}_${safeFileName}`;
 
-    // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await getSupabase().storage
-      .from(STORAGE_BUCKETS.CERTIFICATES)
-      .upload(storagePath, file, {
-        cacheControl: '3600',
-        contentType: 'application/pdf',
-        upsert: false,
-      });
+    const { path: uploadedPath, error: uploadError } = await uploadFile(
+      STORAGE_BUCKETS.CERTIFICATES,
+      storagePath,
+      file
+    );
 
     if (uploadError) {
-      console.error('Supabase upload error:', uploadError);
+      console.error('Storage upload error:', uploadError);
       return NextResponse.json(
         { error: 'Failed to upload certificate' },
         { status: 500 }
       );
     }
 
-    // Create database record (certificateType defaults to OTHER in schema)
     const certificate = await prisma.calibrationCertificate.create({
       data: {
         testId,
-        storagePath: uploadData.path,
+        storagePath: uploadedPath,
         fileName: file.name,
       },
     });

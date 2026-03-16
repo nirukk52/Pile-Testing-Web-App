@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { getSupabase, STORAGE_BUCKETS } from '@/lib/supabase';
+import { deleteFile, STORAGE_BUCKETS } from '@/lib/storage';
 
 interface RouteParams {
   params: Promise<{ testId: string; fileId: string }>;
@@ -18,7 +18,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const { testId, fileId } = await params;
 
-    // Find the field reading
     const fieldReading = await prisma.fieldReading.findUnique({
       where: { id: fileId },
     });
@@ -27,17 +26,15 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'File not found' }, { status: 404 });
     }
 
-    // Delete from Supabase Storage
-    const { error: storageError } = await getSupabase().storage
-      .from(STORAGE_BUCKETS.FIELD_READINGS)
-      .remove([fieldReading.storagePath]);
+    const { error: storageError } = await deleteFile(
+      STORAGE_BUCKETS.FIELD_READINGS,
+      fieldReading.storagePath
+    );
 
     if (storageError) {
-      console.error('Supabase delete error:', storageError);
-      // Continue to delete database record even if storage delete fails
+      console.error('Storage delete error:', storageError);
     }
 
-    // Delete database record
     await prisma.fieldReading.delete({
       where: { id: fileId },
     });

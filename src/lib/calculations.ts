@@ -76,11 +76,18 @@ export function findFinalSettlement(readings: ReadingInput[]): number {
     // If no unloading phase, return max settlement
     return findMaxSettlement(readings);
   }
-  // Get the last reading in unloading phase (lowest load)
-  const lastUnloading = unloadingReadings.reduce((min, r) =>
-    r.loadT < min.loadT ? r : min
-  );
-  return lastUnloading.avgSettlementMm;
+
+  // Final settlement should be the LAST reading at the MINIMUM unloading load
+  // (typically 0 load with 1/5/15 min stabilization readings).
+  const minLoad = Math.min(...unloadingReadings.map((r) => r.loadT));
+  for (let i = unloadingReadings.length - 1; i >= 0; i--) {
+    if (unloadingReadings[i].loadT === minLoad) {
+      return unloadingReadings[i].avgSettlementMm;
+    }
+  }
+
+  // Fallback (should never happen)
+  return unloadingReadings[unloadingReadings.length - 1].avgSettlementMm;
 }
 
 /**

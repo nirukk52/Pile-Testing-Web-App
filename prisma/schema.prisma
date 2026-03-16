@@ -182,6 +182,27 @@ model marketing_events {
   @@index([event_type], map: "idx_marketing_events_type")
 }
 
+/// Reusable project preset for reducing repetitive data entry.
+/// Why: Stores common field values (client, contractor, pile specs) so the
+/// MCP agent can auto-fill new tests for the same project.
+model Template {
+  id             String   @id @default(uuid())
+  name           String   @unique
+  testType       TestType @default(IVPLT)
+  client         String?
+  contractor     String?
+  pmc            String?
+  location       String?
+  pileDiameterMm Float?
+  pileDepthM     Float?
+  concreteGrade  String?
+  designLoadT    Float?
+  ramAreaCm2     Float?
+  jackName       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
 /// Types of pile load tests supported by the system.
 /// Why: Enables Test Type Engine pattern for polymorphic behavior.
 enum TestType {

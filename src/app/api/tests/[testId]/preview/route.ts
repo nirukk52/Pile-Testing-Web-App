@@ -9,7 +9,7 @@ import prisma from '@/lib/prisma';
 import { getTestEngine } from '@/engines';
 import type { TestType, ReadingInput, TestMeta } from '@/engines';
 import { generateIvpltReportHtml } from '@/lib/pdf/templates/ivplt-template';
-import { getPublicUrl, STORAGE_BUCKETS } from '@/lib/supabase';
+import { getPublicUrl, STORAGE_BUCKETS } from '@/lib/storage';
 
 interface RouteParams {
   params: Promise<{ testId: string }>;
