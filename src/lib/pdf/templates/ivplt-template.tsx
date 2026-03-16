@@ -380,6 +380,20 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
 
   const formatDate = (dateStr: string) => {
     try {
+      // Avoid timezone drift: if ISO-like input exists, format using date components directly.
+      // Example: 2026-01-06T00:00:00+05:30 must render as 06 January 2026 (not 05 Jan in UTC hosts).
+      const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (isoMatch) {
+        const year = Number(isoMatch[1]);
+        const month = Number(isoMatch[2]);
+        const day = Number(isoMatch[3]);
+        const monthName = [
+          'January', 'February', 'March', 'April', 'May', 'June',
+          'July', 'August', 'September', 'October', 'November', 'December',
+        ][month - 1];
+        if (monthName) return `${String(day).padStart(2, '0')} ${monthName} ${year}`;
+      }
+
       return new Date(dateStr).toLocaleDateString('en-GB', {
         day: '2-digit',
         month: 'long',
