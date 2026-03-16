@@ -2,6 +2,8 @@
 
 This document defines the canonical rules for turning field-sheet input into an IVPLT report.
 
+See also: `docs/BOUNDARIES.md` for repo/workspace ownership and skill source-of-truth rules.
+
 ## 1) Date Handling (India-first)
 - Parse all sheet dates as `DD/MM/YYYY` (or `DD/MM/YY` -> year 2026 when 2-digit source year is used in this project set).
 - Example: `06/01/26` => `2026-01-06`.
