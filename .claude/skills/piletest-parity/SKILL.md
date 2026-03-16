@@ -40,6 +40,17 @@ Use this skill for parity-focused report generation and debugging.
 - score >= 90 => publish
 - parity target = 100
 
+## Artifact Organization (always)
+- For each test, create a batch folder:
+  - `generated-reports/batches/<slug>/`
+- Save 3-file contract as:
+  - `<slug>-field-sheet-input.pdf`
+  - `<slug>-agent-generated-report-vN.pdf`
+  - `<slug>-reference-report.pdf`
+- Save verifier output as:
+  - `<slug>-verifier-output-<timestamp>.json`
+- Keep root `generated-reports/` only for latest aliases/symlinks; batch folder is canonical history.
+
 ## References
 - `docs/pipeline-parity-spec.md`
 - `scripts/verifier-agent.ts`
