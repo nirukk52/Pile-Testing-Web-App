@@ -41,6 +41,13 @@ Use sync workflow:
 2. Validate/eval in repo
 3. Sync selected skills to runtime path
 
+Sync command:
+```bash
+scripts/sync-skills.sh            # default set
+scripts/sync-skills.sh --all      # all repo skills
+scripts/sync-skills.sh <names...> # selected skills
+```
+
 Do not treat `external-skills/` as authoritative runtime policy.
 
 ## 5) Generated Reports Organization
