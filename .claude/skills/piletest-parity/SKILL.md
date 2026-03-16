@@ -32,6 +32,8 @@ Use this skill for parity-focused report generation and debugging.
 - max settlement includes hold creep peak
 - net settlement is final full-unload settlement
 - elastic rebound = max - net
+- final full-unload settlement selection rule:
+  - use the LAST reading at MINIMUM unload load (e.g., 0-load 15-min stabilized row), not first min-load row
 
 ## Verification Gate
 - score < 90 => block publish

@@ -24,8 +24,13 @@ Given pressure sequence per row:
 ## 4) Calculation Convention (current canonical)
 - `maxSettlementMm` = max settlement across all rows (includes hold creep peak)
 - `finalSettlementMm` = final settlement at full unload
+  - select as LAST reading at MINIMUM unload load (stabilized endpoint)
 - `elasticReboundMm` = `maxSettlementMm - finalSettlementMm`
 - `netSettlementMm` = `finalSettlementMm`
+
+## 4.1 Display Date Convention
+- Cover-page test date must use user-confirmed official test date (display field), not inferred UTC-converted timestamp.
+- If test spans multiple days, display start date on cover and full range in observation section.
 
 ## 5) Required Metadata Gate (before DB write/report generation)
 Block generation until these are confirmed:
