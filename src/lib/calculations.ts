@@ -63,7 +63,7 @@ export function calculateAverageSettlement(
  */
 export function findMaxSettlement(readings: ReadingInput[]): number {
   if (readings.length === 0) return 0;
-  return Math.max(...readings.map((r) => r.avgSettlementMm));
+  return Math.max(...readings.map((r) => r.avgSettlementMm ?? 0));
 }
 
 /**

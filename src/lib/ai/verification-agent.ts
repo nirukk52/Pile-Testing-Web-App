@@ -239,16 +239,27 @@ function checkIS2911Compliance(
     }
   }
 
-  // Check 2: Settlement limit (12mm or 2% of pile diameter)
-  const settlementLimit = pileDiameter > 0 
-    ? Math.min(SETTLEMENT_LIMIT_MM, pileDiameter * 0.02)
-    : SETTLEMENT_LIMIT_MM;
+  // Check 2: Settlement limit — type-aware per IS 2911
+  // RVPLT: 12mm for dia ≤ 600mm, min(18, 2%dia) for dia > 600mm
+  // IVPLT/others: min(12, 2%dia)
+  const settlementLimit = (() => {
+    if (pileDiameter <= 0) return SETTLEMENT_LIMIT_MM;
+    if (testType === 'RVPLT') {
+      return pileDiameter <= 600 ? 12 : Math.min(18, 0.02 * pileDiameter);
+    }
+    return Math.min(SETTLEMENT_LIMIT_MM, pileDiameter * 0.02);
+  })();
 
-  // Find max settlement
+  // Compute max and net settlement from readings.
+  // Net settlement = max settlement - elastic rebound (IS 2911 pass/fail criterion).
   let maxSettlement = 0;
+  let finalSettlement = 0;
+  const pressureValues: number[] = [];
   loadEntries.forEach((entry) => {
     const reading = entry.readings[0];
     if (reading) {
+      const pressure = parseFloat(reading.pressureGauge) || 0;
+      pressureValues.push(pressure);
       const dialGauges = [
         reading.dialGauge1,
         reading.dialGauge2,
@@ -267,27 +278,34 @@ function checkIS2911Compliance(
       if (enabledGauges.length > 0) {
         const avg = enabledGauges.reduce((a, b) => a + b, 0) / enabledGauges.length;
         maxSettlement = Math.max(maxSettlement, avg);
+        finalSettlement = avg;
       }
     }
   });
 
-  // Check 3: Borderline settlement handling
-  if (maxSettlement > settlementLimit * 0.9 && maxSettlement <= settlementLimit * 1.05) {
-    // Borderline case - warn, don't auto-fail
+  // Detect unloading by checking if pressure decreases at the end of the sequence
+  const hasUnloading = pressureValues.length >= 3 &&
+    pressureValues[pressureValues.length - 1] < pressureValues[Math.floor(pressureValues.length / 2)];
+
+  const elasticRebound = hasUnloading ? maxSettlement - finalSettlement : 0;
+  const netSettlement = maxSettlement - elasticRebound;
+
+  // Check 3: Borderline settlement handling (using net settlement)
+  if (netSettlement > settlementLimit * 0.9 && netSettlement <= settlementLimit * 1.05) {
     issues.push({
       id: generateIssueId(),
       severity: 'warning',
       category: 'compliance',
-      message: `Settlement ${maxSettlement.toFixed(2)}mm is near the ${settlementLimit.toFixed(1)}mm limit - requires human review`,
+      message: `Net settlement ${netSettlement.toFixed(2)}mm is near the ${settlementLimit.toFixed(1)}mm limit - requires human review`,
       location: 'Test Results',
     });
     score -= 5;
-  } else if (maxSettlement > settlementLimit * 1.05) {
+  } else if (netSettlement > settlementLimit * 1.05) {
     issues.push({
       id: generateIssueId(),
       severity: 'critical',
       category: 'compliance',
-      message: `Settlement ${maxSettlement.toFixed(2)}mm exceeds ${settlementLimit.toFixed(1)}mm limit - test FAILED per IS 2911`,
+      message: `Net settlement ${netSettlement.toFixed(2)}mm exceeds ${settlementLimit.toFixed(1)}mm limit - test FAILED per IS 2911`,
       location: 'Test Results',
     });
     score -= 20;
@@ -302,7 +320,7 @@ function checkIS2911Compliance(
     LATERAL: 5,
     UPLIFT: 5,
   };
-  const minStages = minStagesByType[testType] ?? 5;
+  const minStages = minStagesByType[testType ?? 'IVPLT'] ?? 5;
   if (uniquePressures.size < minStages) {
     issues.push({
       id: generateIssueId(),

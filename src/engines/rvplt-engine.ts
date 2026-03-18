@@ -113,7 +113,7 @@ export class RvpltEngine implements ITestEngine {
     };
   }
 
-  getGraphConfig(_meta: TestMeta): GraphConfig {
+  getGraphConfig(meta: TestMeta): GraphConfig {
     return {
       title: 'Load vs Settlement Curve',
       xAxisLabel: 'Load (MT)',
@@ -125,7 +125,7 @@ export class RvpltEngine implements ITestEngine {
       annotations: {
         safeLoadLine: false,
         settlementLimitLine: true,
-        settlementLimitValue: this.settlementLimitMm,
+        settlementLimitValue: this.getEffectiveLimit(meta.pileDiameterMm),
       },
     };
   }

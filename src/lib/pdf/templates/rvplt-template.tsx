@@ -288,7 +288,7 @@ function generateObservationSheetHtml(readings: ReadingInput[]): string {
         <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center; font-weight: ${showDate ? '600' : '400'};">${showDate ? dateStr : ''}</td>
         <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center;">${timeStr}</td>
         <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center; font-weight: 600;">${reading.pressureGauge || '-'}</td>
-        <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center; color: #2563eb; font-weight: 600;">${loadChanged ? reading.loadT.toFixed(2) : ''}</td>
+        <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center; color: #2563eb; font-weight: 600;">${loadChanged ? (reading.loadT ?? 0).toFixed(2) : ''}</td>
         <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center;">${reading.dialGauge1 || '-'}</td>
         <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center;">${reading.dialGauge2 || '-'}</td>
         <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center;">${reading.dialGauge3 || '-'}</td>
@@ -1065,16 +1065,16 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
       
       <h3>4.1 Settlement Analysis</h3>
       <table class="specs-table">
-        <tr><td>Maximum Settlement Recorded</td><td>${result.maxSettlementMm.toFixed(2)} mm</td></tr>
-        <tr><td>Elastic Rebound</td><td>${result.elasticReboundMm.toFixed(2)} mm</td></tr>
-        <tr><td>Net Settlement (Max - Rebound)</td><td>${result.netSettlementMm.toFixed(2)} mm</td></tr>
+        <tr><td>Maximum Settlement Recorded</td><td>${(result.maxSettlementMm ?? 0).toFixed(2)} mm</td></tr>
+        <tr><td>Elastic Rebound</td><td>${(result.elasticReboundMm ?? 0).toFixed(2)} mm</td></tr>
+        <tr><td>Net Settlement (Max - Rebound)</td><td>${(result.netSettlementMm ?? 0).toFixed(2)} mm</td></tr>
         <tr><td>Settlement Limit (IS 2911)</td><td>${result.settlementLimitMm} mm</td></tr>
         <tr><td>Test Status</td><td style="color: ${result.isPassed ? '#16a34a' : '#dc2626'}; font-weight: bold;">${result.isPassed ? 'PASSED' : 'FAILED'}</td></tr>
       </table>
       
       <h3>4.2 Acceptance Criteria Check</h3>
       <p>
-        The net settlement of ${result.netSettlementMm.toFixed(2)} mm is 
+        The net settlement of ${(result.netSettlementMm ?? 0).toFixed(2)} mm is 
         ${result.netSettlementMm <= result.settlementLimitMm ? 'within' : 'exceeding'} 
         the permissible limit of ${result.settlementLimitMm} mm as per IS 2911 (Part 4) Clause 7.1.5.1.
       </p>
@@ -1115,7 +1115,7 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
         </div>
         <div class="chart-kpi" style="padding: 8px;">
           <div class="label">Net Settlement</div>
-          <div class="value" style="font-size: 16pt;">${result.netSettlementMm.toFixed(2)}</div>
+          <div class="value" style="font-size: 16pt;">${(result.netSettlementMm ?? 0).toFixed(2)}</div>
           <div class="unit">mm</div>
         </div>
         <div class="chart-kpi" style="padding: 8px;">
@@ -1127,7 +1127,7 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
       
       <div class="chart-summary" style="padding: 10px 15px; margin-top: 10px;">
         <h3 style="font-size: 14pt;">TEST ${result.isPassed ? 'PASSED ✓' : 'FAILED ✗'}</h3>
-        <p style="font-size: 10pt;">Net settlement ${result.netSettlementMm.toFixed(2)}mm is ${result.netSettlementMm <= result.settlementLimitMm ? 'within' : 'exceeding'} the ${result.settlementLimitMm}mm limit (IS 2911 Part 4, Clause 7.1.5.1)</p>
+        <p style="font-size: 10pt;">Net settlement ${(result.netSettlementMm ?? 0).toFixed(2)}mm is ${(result.netSettlementMm ?? 0) <= result.settlementLimitMm ? 'within' : 'exceeding'} the ${result.settlementLimitMm}mm limit (IS 2911 Part 4, Clause 7.1.5.1)</p>
       </div>
     </div>
   </div>
@@ -1156,13 +1156,13 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
                 const loadingOnly = readings.filter((r) => r.phase === 'LOADING');
                 const loadingByLoad: Record<string, number> = {};
                 loadingOnly.forEach((r) => {
-                  loadingByLoad[r.loadT.toFixed(2)] = r.avgSettlementMm;
+                  loadingByLoad[(r.loadT ?? 0).toFixed(2)] = r.avgSettlementMm ?? 0;
                 });
                 const holdRows = readings.filter((r) => r.phase === 'HOLD');
                 if (holdRows.length > 0 && loadingOnly.length > 0) {
-                  const maxLoad = Math.max(...loadingOnly.map((r) => r.loadT));
+                  const maxLoad = Math.max(...loadingOnly.map((r) => r.loadT ?? 0));
                   const endHold = holdRows[holdRows.length - 1];
-                  loadingByLoad[maxLoad.toFixed(2)] = endHold.avgSettlementMm;
+                  loadingByLoad[maxLoad.toFixed(2)] = endHold.avgSettlementMm ?? 0;
                 }
                 const loadingData = Object.entries(loadingByLoad)
                   .map(([load, settlement]) => ({ load: parseFloat(load), settlement }))
@@ -1196,7 +1196,7 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
                 const unloadingReadings = readings.filter((r) => r.phase === 'UNLOADING');
                 const unloadingByLoad: Record<string, number> = {};
                 unloadingReadings.forEach((r) => {
-                  unloadingByLoad[r.loadT.toFixed(2)] = r.avgSettlementMm;
+                  unloadingByLoad[(r.loadT ?? 0).toFixed(2)] = r.avgSettlementMm ?? 0;
                 });
                 const unloadingData = Object.entries(unloadingByLoad)
                   .map(([load, settlement]) => ({ load: parseFloat(load), settlement }))
@@ -1235,8 +1235,8 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
         <ol>
           <li>The pile was loaded up to ${testLoadT.toFixed(1)} MT (1.5 times the design load of ${designLoadT} MT) as per IS 2911 (Part 4) Clause 7.1.5.1.</li>
           <li>The maximum settlement recorded at test load was ${result.maxSettlementMm.toFixed(2)} mm.</li>
-          <li>After complete unloading, the elastic rebound was ${result.elasticReboundMm.toFixed(2)} mm.</li>
-          <li>The net settlement (residual) is ${result.netSettlementMm.toFixed(2)} mm, which is ${result.netSettlementMm <= result.settlementLimitMm ? 'within' : 'exceeding'} the permissible limit of ${result.settlementLimitMm} mm.</li>
+          <li>After complete unloading, the elastic rebound was ${(result.elasticReboundMm ?? 0).toFixed(2)} mm.</li>
+          <li>The net settlement (residual) is ${(result.netSettlementMm ?? 0).toFixed(2)} mm, which is ${(result.netSettlementMm ?? 0) <= result.settlementLimitMm ? 'within' : 'exceeding'} the permissible limit of ${result.settlementLimitMm} mm.</li>
           <li><strong>The pile ${result.isPassed ? 'HAS PASSED' : 'HAS FAILED'} the Routine Vertical Pile Load Test as per IS 2911 (Part 4) Clause 7.1.5.1.</strong></li>
         </ol>
         ${result.isPassed ? `

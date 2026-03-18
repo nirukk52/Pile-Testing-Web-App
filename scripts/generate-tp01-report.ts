@@ -6,6 +6,7 @@ import { PrismaClient } from '@prisma/client';
 import { IvpltEngine } from '../src/engines/ivplt-engine';
 import { generatePDFWithPageNumbers } from '../src/lib/pdf/generator';
 import { generateIvpltReportHtml } from '../src/lib/pdf/templates/ivplt-template';
+import { resolveReportPath } from '../src/lib/report-paths';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -235,11 +236,10 @@ async function main() {
   // Generate PDF
   try {
     const pdfBuffer = await generatePDFWithPageNumbers(html);
-    const outputDir = '/Users/priyankalalge/.openclaw/workspace-piletest/generated-reports';
-    await fs.mkdir(outputDir, { recursive: true });
-    const pdfPath = path.join(outputDir, 'TP-01_IVPLT_2026-01-06_Report.pdf');
-    await fs.writeFile(pdfPath, pdfBuffer);
-    console.log('PDF generated:', pdfPath);
+    const resolved = await resolveReportPath('tp-01-ivplt');
+    await fs.writeFile(resolved.fullPath, pdfBuffer);
+    console.log('PDF generated:', resolved.fullPath);
+    console.log('Version:', resolved.version);
     console.log('Size:', pdfBuffer.length, 'bytes');
   } catch (err) {
     console.error('PDF generation failed:', err);

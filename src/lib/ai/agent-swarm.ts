@@ -189,7 +189,7 @@ Extract ALL readings from these field sheet pages into a single sequential list.
 - **LOADING**: Pressure INCREASES (0→40→80→120→160→200→240→280→320→360→400→420)
   - First reading is ALWAYS pressure=0 with all dial gauges at 0 or near 0
   - Each pressure step has ~5 readings before stepping up
-- **HOLDING**: Pressure STAYS SAME at maximum for extended time (usually 24 hours)
+- **HOLDING**: Pressure STAYS SAME at maximum for extended time (IVPLT: 24 hours, RVPLT: 30-60 min)
   - Many readings at the same high pressure (e.g., 420)
 - **UNLOADING**: Pressure DECREASES (420→360→320→280→240→200→160→120→80→40→0)
   - Settlement decreases (rebound)
