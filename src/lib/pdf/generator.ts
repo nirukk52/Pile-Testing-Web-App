@@ -235,11 +235,12 @@ export async function generatePDF(options: PDFGeneratorOptions): Promise<Buffer>
  */
 export async function generatePDFWithPageNumbers(
   html: string,
-  options?: Partial<PDFGeneratorOptions>
+  options?: Partial<PDFGeneratorOptions> & { reportLabel?: string }
 ): Promise<Buffer> {
+  const label = options?.reportLabel || 'IVPLT Report';
   const footerTemplate = `
     <div style="width: 100%; font-size: 9px; padding: 8px 40px; display: flex; justify-content: space-between; align-items: center; color: #64748b; border-top: 1px solid #e2e8f0;">
-      <span style="flex: 1; text-align: left;">IVPLT Report - IS 2911 (Part 4) - 2013</span>
+      <span style="flex: 1; text-align: left;">${label} - IS 2911 (Part 4) - 2013</span>
       <span style="flex: 1; text-align: center; font-weight: 600;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
       <span style="flex: 1; text-align: right;"></span>
     </div>

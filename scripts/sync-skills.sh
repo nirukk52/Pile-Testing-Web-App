@@ -6,6 +6,7 @@ RUNTIME_SKILLS_DIR="${HOME}/.agents/skills"
 
 DEFAULT_SKILLS=(
   "piletest-pro"
+  "piletest-ops"
   "piletest-parity"
   "skill-creator"
 )

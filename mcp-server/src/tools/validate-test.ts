@@ -99,7 +99,7 @@ Returns:
           const legacyProjectInfo = params.project_info as Record<string, unknown>;
           const legacyEntries = params.readings.map((r) => ({
             id: `reading-${r.sequence}`,
-            phase: r.phase.toLowerCase() as "loading" | "holding" | "unloading",
+            phase: (r.phase === 'HOLD' ? 'holding' : r.phase.toLowerCase()) as "loading" | "holding" | "unloading",
             loadAppliedTons: r.loadT,
             averageSettlementMm: r.avgSettlementMm,
             timestamp: new Date().toISOString(),

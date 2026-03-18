@@ -12,9 +12,17 @@ import path from 'path';
 const prisma = new PrismaClient();
 
 async function main() {
-  // Load corrected readings from extraction
+  const readingsPath = '/tmp/tp01-v6-readings.json';
+  try {
+    await fs.access(readingsPath);
+  } catch {
+    console.error(`❌ Readings file not found at ${readingsPath}`);
+    console.error('   Run the ingest script first (e.g. scripts/ingest-tp01-v2.ts)');
+    process.exit(1);
+  }
+
   const rawReadings = JSON.parse(
-    await fs.readFile('/tmp/tp01-v6-readings.json', 'utf-8')
+    await fs.readFile(readingsPath, 'utf-8')
   );
   console.log(`Loaded ${rawReadings.length} corrected readings`);
 
@@ -97,7 +105,8 @@ async function main() {
     let recordedAt = new Date('2026-01-06T15:14:00+05:30');
     if (r.date && r.time) {
       try {
-        const [y, m, d] = r.date.split('-').map(Number);
+        const dateParts = r.date.split('-').map(Number);
+        const [y, m, d] = dateParts[0] > 31 ? dateParts : [dateParts[2], dateParts[1], dateParts[0]];
         const [hh, mm] = r.time.split(':').map(Number);
         recordedAt = new Date(Date.UTC(y, m - 1, d, hh - 5, mm - 30)); // IST offset
       } catch {}

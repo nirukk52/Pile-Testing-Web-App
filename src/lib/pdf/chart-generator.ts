@@ -92,6 +92,17 @@ export function processReadingsForChart(readings: ReadingInput[]): ProcessedChar
 }
 
 /**
+ * Optional chart labels for lateral/other test types.
+ * Why: Lateral tests use deflection terminology; IVPLT uses settlement.
+ */
+export interface ChartScriptOptions {
+  chartTitle?: string;
+  yAxisLabel?: string;
+  subtitle?: string;
+  canvasId?: string;
+}
+
+/**
  * Generate the Chart.js script for embedding in HTML.
  * Why: Creates the complete <script> block for Chart.js initialization.
  * 
@@ -101,9 +112,18 @@ export function processReadingsForChart(readings: ReadingInput[]): ProcessedChar
  * - Smart spacing: if too many points, only show labels at intervals
  * 
  * @param readings - Raw reading inputs from the test
+ * @param options - Optional chart title and y-axis label (defaults: LOAD VS SETTLEMENT, SETTLEMENT (mm))
  * @returns HTML string containing the Chart.js initialization script
  */
-export function generateChartScript(readings: ReadingInput[]): string {
+export function generateChartScript(
+  readings: ReadingInput[],
+  options?: ChartScriptOptions
+): string {
+  const chartTitle = options?.chartTitle ?? 'LOAD VS SETTLEMENT';
+  const yAxisLabel = options?.yAxisLabel ?? 'SETTLEMENT (mm)';
+  const subtitle = options?.subtitle ?? 'PLT';
+  const canvasId = options?.canvasId ?? 'loadSettlementChart';
+
   // Pre-process readings to JSON for embedding
   const readingsJson = JSON.stringify(
     readings.map(r => ({ x: r.loadT, y: r.avgSettlementMm, phase: r.phase }))
@@ -142,8 +162,8 @@ export function generateChartScript(readings: ReadingInput[]): string {
           
           // Calculate axis bounds
           const allData = [...loadingData, ...unloadingData];
-          const maxLoad = Math.max(...allData.map(d => d.x));
-          const maxSettlement = Math.max(...allData.map(d => d.y));
+          const maxLoad = Math.max(...allData.map(d => d.x), 0);
+          const maxSettlement = Math.max(...allData.map(d => d.y), 0);
           
           // Dynamic step size based on data range
           const xStep = maxLoad > 1500 ? 200 : 100;
@@ -219,7 +239,7 @@ export function generateChartScript(readings: ReadingInput[]): string {
             });
           }
           
-          const ctx = document.getElementById('loadSettlementChart').getContext('2d');
+          const ctx = document.getElementById('${canvasId}').getContext('2d');
           new Chart(ctx, {
             type: 'line',
             data: { datasets },
@@ -235,14 +255,14 @@ export function generateChartScript(readings: ReadingInput[]): string {
                 datalabels: { display: true },
                 title: {
                   display: true,
-                  text: 'LOAD VS SETTLEMENT',
+                  text: '${chartTitle}',
                   position: 'bottom',
                   font: { size: 12, weight: 'bold' },
                   padding: { top: 10 }
                 },
                 subtitle: {
                   display: true,
-                  text: 'PLT',
+                  text: '${subtitle}',
                   position: 'bottom',
                   font: { size: 11, weight: 'bold' },
                   padding: { top: 2 }
@@ -284,7 +304,7 @@ export function generateChartScript(readings: ReadingInput[]): string {
                   reverse: true,
                   title: { 
                     display: true, 
-                    text: 'SETTLEMENT (mm)', 
+                    text: '${yAxisLabel}', 
                     font: { weight: 'bold', size: 11 },
                     padding: { top: 5 }
                   },

@@ -165,6 +165,12 @@ export function FieldUpload({ onNext, projectInfo, onUpdateField }: FieldUploadP
     if (pi.testDate) onUpdateField('testDate', pi.testDate);
     if (pi.dateOfCasting) onUpdateField('dateOfCasting', pi.dateOfCasting);
     if (pi.reportNo) onUpdateField('reportNo', pi.reportNo);
+    if (pi.testType) {
+      const normalized = String(pi.testType).toUpperCase().trim();
+      const validTypes = { IVPLT: 'IVPLT', RVPLT: 'RVPLT', LATERAL: 'LATERAL', UPLIFT: 'UPLIFT' } as const;
+      const mapped = validTypes[normalized as keyof typeof validTypes] ?? null;
+      if (mapped) onUpdateField('testType', mapped);
+    }
     
     // Convert readings to LoadEntry format
     const ramArea = pi.ramArea || parseFloat(projectInfo.ramArea || '0');

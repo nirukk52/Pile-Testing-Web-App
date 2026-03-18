@@ -461,6 +461,7 @@ export const useTestStore = create<TestState & TestActions>()((set, get) => ({
           jackName: projectInfo.jackName || null,
           ramAreaCm2: parseFloat(projectInfo.ramArea) || 71.26,
           gaugeLeastCountMm: parseFloat(projectInfo.lcOfDialGauge) || 0.01,
+          ...(projectInfo.testType ? { testType: projectInfo.testType } : {}),
         });
       }
 

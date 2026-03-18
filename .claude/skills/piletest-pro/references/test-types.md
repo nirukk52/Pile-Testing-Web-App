@@ -62,7 +62,7 @@ Testing of production/working piles after initial test confirms design. Lower te
 | Load Multiplier | 1.5× design load |
 | Settlement Limit | 12mm (or 2% diameter) |
 | Ultimate Limit | 10% of pile diameter |
-| Hold Duration (max load) | 1 hour minimum |
+| Hold Duration (max load) | 30-60 minutes |
 | Increment Size | 25% of design load |
 
 ### Use Cases
@@ -78,6 +78,7 @@ class RvpltEngine implements ITestEngine {
   readonly fullName = 'Routine Vertical Pile Load Test';
   readonly testLoadMultiplier = 1.5;
   readonly settlementLimitMm = 12;
+  // getEffectiveLimit(): 12mm for dia <= 600mm, min(18, 2% dia) for dia > 600mm
 }
 ```
 
@@ -98,8 +99,8 @@ Testing horizontal/lateral resistance of pile for structures subject to wind, se
 | Parameter | Value |
 |-----------|-------|
 | Load Multiplier | 2.5× design lateral load |
-| Deflection Limit | Project-specific |
-| Typical Limit | 5-12mm at ground level |
+| Deflection Limit | 5mm at ground level |
+| Typical Limit | 12mm (secondary criterion) |
 | Hold Duration | 1 hour per increment |
 
 ### Differences from Vertical Tests
@@ -117,9 +118,10 @@ Testing horizontal/lateral resistance of pile for structures subject to wind, se
 class LateralEngine implements ITestEngine {
   readonly testType: TestType = 'LATERAL';
   readonly displayName = 'Lateral';
-  readonly fullName = 'Lateral Load Test';
+  readonly fullName = 'Lateral Pile Load Test';
   readonly testLoadMultiplier = 2.5;
-  // Deflection limit varies by project
+  readonly settlementLimitMm = 5;  // primary deflection limit
+  // secondary limit: 12mm (safe load = 0.5 × load at 12mm)
 }
 ```
 
@@ -140,7 +142,7 @@ Testing upward resistance capacity for tension piles, anchor piles, or foundatio
 | Parameter | Value |
 |-----------|-------|
 | Load Multiplier | 2.5× design uplift load |
-| Uplift Limit | Project-specific |
+| Uplift Limit | 12mm |
 | Hold Duration | 24 hours (initial) |
 
 ### Differences from Vertical Tests
@@ -161,7 +163,8 @@ class UpliftEngine implements ITestEngine {
   readonly displayName = 'Uplift';
   readonly fullName = 'Uplift / Pullout Load Test';
   readonly testLoadMultiplier = 2.5;
-  // Uplift limit varies by project
+  readonly settlementLimitMm = 12;  // uplift limit
+  // Optional yield detection via displacement jumps
 }
 ```
 
@@ -179,8 +182,8 @@ INITIAL PULLOUT / UPLIFT PILE LOAD TEST ON {diameter}mm DIA PILE
 | **Load Direction** | Down | Down | Horizontal | Up |
 | **Multiplier** | 2.5× | 1.5× | 2.5× | 2.5× |
 | **Settlement Limit** | 12mm | 12mm | - | - |
-| **Deflection Limit** | - | - | 5-12mm | - |
-| **Uplift Limit** | - | - | - | Varies |
+| **Deflection Limit** | - | - | 5mm | - |
+| **Uplift Limit** | - | - | - | 12mm |
 | **Max Hold** | 24h | 1h | 1h | 24h |
 | **IS 2911 Section** | Part 4 | Part 4 | Part 4 | Part 4 |
 
@@ -207,14 +210,10 @@ ELSE IF tension_loads_expected THEN
 | Test Type | Engine | Report Template | Chart | Status |
 |-----------|--------|-----------------|-------|--------|
 | IVPLT | ✅ | ✅ | ✅ | Complete |
-| RVPLT | 🔲 | 🔲 | 🔲 | Planned |
-| Lateral | 🔲 | 🔲 | 🔲 | Planned |
-| Uplift | 🔲 | 🔲 | 🔲 | Planned |
+| RVPLT | ✅ | ✅ | ✅ | Complete |
+| Lateral | ✅ | ✅ | ✅ | Complete |
+| Uplift | ✅ | ✅ | ✅ | Complete |
 
 ### Adding New Test Type
 
-1. Create engine in `src/engines/{type}-engine.ts`
-2. Implement `ITestEngine` interface
-3. Register in `src/engines/factory.ts`
-4. Create report template in `src/lib/pdf/templates/`
-5. Update this skill document
+All four test types (IVPLT, RVPLT, Lateral, Uplift) are now complete.

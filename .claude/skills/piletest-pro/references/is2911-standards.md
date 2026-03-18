@@ -37,18 +37,49 @@ Same criteria as IVPLT, but:
 - Test load = 1.5× design load (instead of 2.5×)
 - Used for production piles after initial testing confirms design
 
+### Lateral Load Test
+**Clause 8.4 - Safe Lateral Load:**
+
+1. **Deflection Criterion (5mm)**
+   - Safe lateral load = load at which net deflection equals 5mm at ground level
+
+2. **Secondary Criterion (12mm)**
+   - Safe lateral load shall not exceed 0.5 × load at which deflection equals 12mm
+
+3. **Governing Safe Load**
+   - Adopt the **minimum** of:
+     - Design lateral load
+     - Load at 5mm deflection
+     - Half of load at 12mm deflection
+
+4. **Net Deflection**
+   - Net deflection = test pile deflection - reaction pile deflection
+   - Uses 2 gauges on test pile + 2 on reaction pile
+
+### Uplift / Pullout Load Test
+**Clause 9.4 - Safe Uplift Load:**
+
+1. **Uplift Criterion (12mm)**
+   - Safe uplift load = (2/3) × load at which total uplift equals 12mm
+
+2. **Yield Criterion (optional)**
+   - If a yield/break point is detected: safe load shall not exceed 0.5 × yield load
+   - Yield detected when displacement jump > 2mm between consecutive readings at similar load
+
+3. **Governing Safe Load**
+   - Adopt the **minimum** of:
+     - Design uplift load
+     - (2/3) × load at 12mm uplift
+     - (1/2) × yield load (if detected)
+
 ### Pass/Fail Determination
 
 ```
-IF netSettlement ≤ settlementLimit THEN
-  status = PASSED
-ELSE
-  status = FAILED
+IF testType IN (IVPLT, RVPLT, UPLIFT) THEN
+  IF netSettlement <= settlementLimit THEN PASSED ELSE FAILED
+ELSE IF testType == LATERAL THEN
+  IF netDeflection <= 5mm THEN PASSED ELSE FAILED
 END
-
-WHERE:
-  settlementLimit = min(12mm, 0.02 × pileDiameterMm)
-  netSettlement = maxSettlement - elasticRebound
 ```
 
 ---
@@ -59,8 +90,8 @@ WHERE:
 |-----------|------------------|----------------|
 | IVPLT | 12mm (or 2% dia) | 10% of pile diameter |
 | RVPLT | 12mm (or 2% dia) | 10% of pile diameter |
-| Lateral | Varies by spec | Based on deflection |
-| Uplift | Varies by spec | Based on net uplift |
+| Lateral | 5mm deflection | 12mm (secondary) |
+| Uplift | 12mm uplift | Yield load (if detected) |
 
 ### Examples
 

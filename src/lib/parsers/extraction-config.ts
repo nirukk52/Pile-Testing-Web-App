@@ -193,6 +193,18 @@ export const FIELD_DEFINITIONS = {
       hint: 'Format: M followed by number (M25, M30, M35, M40). Extract just the grade, ignore other text.',
     },
   },
+  testType: {
+    displayName: 'Type of Test',
+    description: 'The type of pile load test being performed. Determines multiplier and acceptance criteria.',
+    aliases: ['type of test', 'test type', 'type of load test', 'type of pile load test', 'type'],
+    patterns: [/type\s*of\s*test/i, /test\s*type/i, /type\s*of\s*(pile\s*)?load\s*test/i],
+    type: 'string' as const,
+    examples: ['IVPLT', 'RVPLT', 'Lateral', 'Uplift', 'Pullout'],
+    validation: {
+      required: false,
+      hint: 'One of: IVPLT (Initial Vertical), RVPLT (Routine Vertical), LATERAL, UPLIFT/Pullout. Normalize to uppercase.',
+    },
+  },
 } as const;
 
 // =============================================================================

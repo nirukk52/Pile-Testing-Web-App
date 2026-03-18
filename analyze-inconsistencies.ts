@@ -95,7 +95,8 @@ function parseDateTime(dateStr: string, timeStr: string): Date | null {
       return null;
     }
     
-    const [year, month, day] = dateStr.split('-').map(Number);
+    const rawParts = dateStr.split('-').map(Number);
+    const [year, month, day] = rawParts[0] > 31 ? rawParts : [rawParts[2], rawParts[1], rawParts[0]];
     if (isNaN(year) || isNaN(month) || isNaN(day)) return null;
     
     return new Date(year, month - 1, day, hours, minutes);

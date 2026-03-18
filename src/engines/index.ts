@@ -32,5 +32,8 @@ export type { TestTypeInfo } from './factory';
 
 // Concrete Engines (for direct instantiation if needed)
 export { IvpltEngine } from './ivplt-engine';
+export { RvpltEngine } from './rvplt-engine';
+export { LateralEngine } from './lateral-engine';
+export { UpliftEngine } from './uplift-engine';
 
 

@@ -58,6 +58,9 @@ Returns:
         const { getTestEngine } = await import("@/engines");
         const { generatePDFWithPageNumbers } = await import("@/lib/pdf/generator");
         const { generateIvpltReportHtml } = await import("@/lib/pdf/templates/ivplt-template");
+        const { generateRvpltReportHtml } = await import("@/lib/pdf/templates/rvplt-template");
+        const { generateLateralReportHtml } = await import("@/lib/pdf/templates/lateral-template");
+        const { generateUpliftReportHtml } = await import("@/lib/pdf/templates/uplift-template");
         const { mergePdfs } = await import("@/lib/pdf/merge");
         const { getPublicUrl, STORAGE_BUCKETS } = await import("@/lib/storage");
 
@@ -159,8 +162,26 @@ Returns:
           })),
         };
 
-        const html = generateIvpltReportHtml(reportData);
-        let pdfBuffer = await generatePDFWithPageNumbers(html);
+        /**
+         * Why: Dispatch to the correct HTML template based on test type,
+         * so each test type gets its IS 2911-compliant report layout.
+         */
+        const templateByType: Record<string, (data: typeof reportData) => string> = {
+          IVPLT: generateIvpltReportHtml,
+          RVPLT: generateRvpltReportHtml,
+          LATERAL: generateLateralReportHtml,
+          UPLIFT: generateUpliftReportHtml,
+        };
+        const reportLabelByType: Record<string, string> = {
+          IVPLT: 'IVPLT Report',
+          RVPLT: 'RVPLT Report',
+          LATERAL: 'Lateral Load Test Report',
+          UPLIFT: 'Uplift Load Test Report',
+        };
+        const generateHtml = templateByType[test.testType] || generateIvpltReportHtml;
+        const html = generateHtml(reportData);
+        const reportLabel = reportLabelByType[test.testType] || 'IVPLT Report';
+        let pdfBuffer = await generatePDFWithPageNumbers(html, { reportLabel });
 
         if (test.fieldReadings.length > 0) {
           pdfBuffer = await mergePdfs(

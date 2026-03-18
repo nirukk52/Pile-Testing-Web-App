@@ -36,6 +36,7 @@ export async function mergePdfs(
 
   console.log(`Merging ${documents.length} ${documentType} PDFs...`);
 
+  const failures: string[] = [];
   for (const doc of documents) {
     try {
       console.log(`Reading ${documentType} from: ${doc.storagePath}`);
@@ -56,8 +57,14 @@ export async function mergePdfs(
       
       console.log(`Successfully merged ${pageCount} pages from ${doc.storagePath}`);
     } catch (error) {
-      console.error(`Failed to merge ${documentType} PDF from ${doc.storagePath}:`, error);
+      const msg = `Failed to merge ${documentType} PDF from ${doc.storagePath}: ${(error as Error).message}`;
+      console.error(msg);
+      failures.push(doc.storagePath);
     }
+  }
+
+  if (failures.length > 0) {
+    console.warn(`⚠️ ${failures.length}/${documents.length} ${documentType} PDFs could not be merged: ${failures.join(', ')}`);
   }
 
   const mergedPdfBytes = await mainPdf.save();

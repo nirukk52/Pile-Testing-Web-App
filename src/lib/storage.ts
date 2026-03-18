@@ -107,5 +107,13 @@ export async function downloadFile(
   storagePath: string
 ): Promise<Buffer> {
   const fullPath = resolvePath(bucket, storagePath);
-  return fs.readFile(fullPath);
+  try {
+    return await fs.readFile(fullPath);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      throw new Error(`File not found: ${bucket}/${storagePath}`);
+    }
+    throw new Error(`Failed to read ${bucket}/${storagePath}: ${(err as Error).message}`);
+  }
 }

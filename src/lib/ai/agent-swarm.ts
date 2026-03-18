@@ -295,13 +295,13 @@ function normalizeDateToISO(dateStr: string | undefined): string | undefined {
     return `${dmyMatch[3]}-${month}-${day}`;
   }
   
-  // Try D/M/YY or DD/MM/YY (2-digit year) - always use 2026
+  // Try D/M/YY or DD/MM/YY (2-digit year) — DD-MM-YY is always day-first
   const shortYearMatch = dateStr.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2})$/);
   if (shortYearMatch) {
     const day = shortYearMatch[1].padStart(2, '0');
     const month = shortYearMatch[2].padStart(2, '0');
-    // All pile test data is from 2026
-    return `2026-${month}-${day}`;
+    const year = 2000 + parseInt(shortYearMatch[3]);
+    return `${year}-${month}-${day}`;
   }
   
   return dateStr; // Return original if can't parse
@@ -615,6 +615,12 @@ function normalizePhases(rawReadings: RawReading[]): RawReading[] {
   if (rawReadings.length === 0) return rawReadings;
 
   const maxPressure = Math.max(...rawReadings.map((r) => r.pressure ?? 0));
+
+  // If all pressures are zero, there's no meaningful test data to phase-label.
+  if (maxPressure === 0) {
+    return rawReadings.map((r) => ({ ...r, phase: 'loading' }));
+  }
+
   let unloadingStarted = false;
   let previousPressure = rawReadings[0].pressure ?? 0;
 
@@ -786,7 +792,7 @@ export async function runAgentSwarm(
   const fields: (keyof ExpectedProjectInfo)[] = [
     'pileId', 'reportNo', 'project', 'location', 'client', 'contractor',
     'pileDiameter', 'pileDepth', 'designLoad', 'testLoad', 'ramArea',
-    'concreteGrade', 'testDate', 'dateOfCasting'
+    'concreteGrade', 'testDate', 'dateOfCasting', 'testType'
   ];
   
   for (const field of fields) {

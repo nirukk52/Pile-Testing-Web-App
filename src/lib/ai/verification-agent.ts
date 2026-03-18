@@ -296,12 +296,19 @@ function checkIS2911Compliance(
   // Check 4: Required loading stages
   const pressures = loadEntries.map((e) => parseFloat(e.readings[0]?.pressureGauge || '0'));
   const uniquePressures = new Set(pressures.filter((p) => p > 0));
-  if (uniquePressures.size < 5 && testType === 'IVPLT') {
+  const minStagesByType: Record<string, number> = {
+    IVPLT: 8,
+    RVPLT: 5,
+    LATERAL: 5,
+    UPLIFT: 5,
+  };
+  const minStages = minStagesByType[testType] ?? 5;
+  if (uniquePressures.size < minStages) {
     issues.push({
       id: generateIssueId(),
       severity: 'info',
       category: 'compliance',
-      message: `Only ${uniquePressures.size} load stages recorded - IS 2911 recommends minimum 8 stages for IVPLT`,
+      message: `Only ${uniquePressures.size} load stages recorded - IS 2911 recommends minimum ${minStages} stages for ${testType}`,
       location: 'Data Entry',
     });
   }

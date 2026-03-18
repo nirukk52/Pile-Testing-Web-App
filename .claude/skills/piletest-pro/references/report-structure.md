@@ -389,3 +389,33 @@ Reviewed by: ________________    Approved by: ________________
 | Header Size | 9pt |
 | Footer | Page X of Y |
 | Print Background | Yes |
+
+---
+
+## Test Type Variations
+
+The base report structure above applies to all test types. Each type has specific variations:
+
+### RVPLT (Routine Vertical)
+- **Cover Title**: "ROUTINE STATIC VERTICAL PILE LOAD TEST"
+- **Test Load**: 1.5 × Design Load (not 2.5×)
+- **Methodology**: 25% increments, 30-60 minute hold at max (not 24h)
+- **Results**: Pass/fail only -- no Safe Load Determination section
+- **IS 2911 Reference**: Clause 7.1.5.1
+
+### Lateral
+- **Cover Title**: "INITIAL STATIC LATERAL PILE LOAD TEST"
+- **Terminology**: "Deflection" replaces "Settlement" throughout
+- **Methodology**: Lateral load application, deflection on test pile and reaction pile, net deflection = test pile - reaction pile
+- **Data Table**: DG1/DG2 = Test Pile gauges, DG3/DG4 = Reaction Pile gauges, extra "Net Deflection" column
+- **Results**: Safe load from 5mm deflection criterion + 12mm criterion
+- **Chart**: "Load vs Deflection Curve", Y-axis = "Deflection (mm)"
+- **IS 2911 Reference**: Clause 8.4
+
+### Uplift
+- **Cover Title**: "INITIAL STATIC PULLOUT / UPLIFT PILE LOAD TEST"
+- **Terminology**: "Uplift" replaces "Settlement" throughout
+- **Methodology**: Uplift load application, upward displacement measurement
+- **Results**: Safe load from 12mm uplift criterion + yield criterion (if observed)
+- **Chart**: "Load vs Uplift Curve", Y-axis = "Uplift (mm)", Y-axis NOT inverted (uplift goes up)
+- **IS 2911 Reference**: Clause 9.4

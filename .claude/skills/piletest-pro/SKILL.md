@@ -39,9 +39,18 @@ safeLoad_ultimate = 0.5 × loadAt10PercentDiameter
 
 ### Pass/Fail Criteria (IS 2911)
 
-**Vertical Tests (IVPLT/RVPLT)**:
-- Net settlement ≤ 12mm (or 2% of pile diameter, whichever is less)
-- Safe load = **minimum** of design load, safeLoad_12mm, safeLoad_ultimate
+**Vertical Tests (IVPLT/RVPLT)** - Clause 7.1.5.1:
+- Net settlement ≤ 12mm (or min(18mm, 2% dia) for dia > 600mm)
+- IVPLT safe load = **min** of design load, safeLoad_12mm, safeLoad_ultimate
+- RVPLT: pass/fail only, no safe load interpolation
+
+**Lateral Test** - Clause 8.4:
+- Net deflection = test pile deflection − reaction pile deflection
+- Safe load = **min** of load at 5mm deflection, 0.5 × load at 12mm deflection
+
+**Uplift Test** - Clause 9.4:
+- Safe load = **min** of (2/3) × load at 12mm uplift, (1/2) × yield load (if detected)
+- Yield = displacement jump > 2mm between consecutive readings at similar load
 
 ## Workflow
 
@@ -87,7 +96,10 @@ safeLoadAdopted = min(
 
 ### Chart Configuration
 
-- X-axis: Load (MT)
-- Y-axis: Settlement (mm) - **inverted** (0 at top, increases downward)
-- Curves: Loading (blue), Holding (amber), Unloading (green)
-- Annotations: 12mm limit line, safe load vertical line
+| Test Type | X-axis | Y-axis | Y Inverted | Annotations |
+|-----------|--------|--------|------------|-------------|
+| IVPLT/RVPLT | Load (MT) | Settlement (mm) | Yes | 12mm limit, safe load |
+| Lateral | Load (MT) | Deflection (mm) | Yes | 5mm limit, 12mm limit |
+| Uplift | Load (MT) | Uplift (mm) | No | 12mm limit, yield point |
+
+Curves: Loading (blue), Holding (amber), Unloading (green)

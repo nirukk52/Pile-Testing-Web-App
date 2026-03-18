@@ -5,6 +5,9 @@
 
 import type { ITestEngine, TestType } from './types';
 import { IvpltEngine } from './ivplt-engine';
+import { RvpltEngine } from './rvplt-engine';
+import { LateralEngine } from './lateral-engine';
+import { UpliftEngine } from './uplift-engine';
 
 /**
  * Engine registry mapping test types to their implementations.
@@ -12,15 +15,9 @@ import { IvpltEngine } from './ivplt-engine';
  */
 const engineRegistry: Record<TestType, () => ITestEngine> = {
   IVPLT: () => new IvpltEngine(),
-  RVPLT: () => {
-    throw new Error('RVPLT engine not yet implemented');
-  },
-  LATERAL: () => {
-    throw new Error('Lateral engine not yet implemented');
-  },
-  UPLIFT: () => {
-    throw new Error('Uplift engine not yet implemented');
-  },
+  RVPLT: () => new RvpltEngine(),
+  LATERAL: () => new LateralEngine(),
+  UPLIFT: () => new UpliftEngine(),
 };
 
 /**
@@ -100,7 +97,7 @@ export function getTestTypeInfoList(): TestTypeInfo[] {
       fullName: 'Routine Vertical Pile Load Test',
       description: 'Standard vertical load testing (1.5× design load)',
       multiplier: 1.5,
-      isImplemented: false,
+      isImplemented: true,
     },
     {
       id: 'LATERAL',
@@ -108,7 +105,7 @@ export function getTestTypeInfoList(): TestTypeInfo[] {
       fullName: 'Lateral Load Test',
       description: 'Horizontal load testing (2.5× design load)',
       multiplier: 2.5,
-      isImplemented: false,
+      isImplemented: true,
     },
     {
       id: 'UPLIFT',
@@ -116,7 +113,7 @@ export function getTestTypeInfoList(): TestTypeInfo[] {
       fullName: 'Uplift / Pullout Load Test',
       description: 'Testing upward resistance (2.5× design load)',
       multiplier: 2.5,
-      isImplemented: false,
+      isImplemented: true,
     },
   ];
 }

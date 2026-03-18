@@ -1,7 +1,7 @@
 /**
- * IVPLT Report HTML Template V2
- * Why: Generates professional HTML for PDF conversion matching IS 2911 report format.
- * Updated to match report-generation-v2.md spec with new section structure.
+ * RVPLT Report HTML Template
+ * Why: Generates professional HTML for Routine Vertical Pile Load Test PDF conversion.
+ * Follows IS 2911 Part 4 Clause 7.1.5.1 — pass/fail only, no safe load determination.
  */
 
 import type { CalculationResult, ReadingInput } from '@/engines';
@@ -36,17 +36,15 @@ export interface CalibrationCertificateFile {
 }
 
 /**
- * Data structure for IVPLT report generation.
+ * Data structure for RVPLT report generation.
+ * Why: Same shape as IvpltReportData; RVPLT uses 1.5× design load and pass/fail only.
  */
-export interface IvpltReportData {
-  // Project info
+export interface RvpltReportData {
   projectName: string;
   client: string;
   contractor: string;
   pmc?: string;
   location: string;
-  
-  // Pile info
   pileId: string;
   reportNo?: string;
   testDate: string;
@@ -55,27 +53,15 @@ export interface IvpltReportData {
   concreteGrade: string;
   designLoadT: number;
   testLoadT: number;
-  
-  // Equipment
   jackName?: string;
   ramAreaCm2: number;
   gaugeLeastCountMm: number;
-  
-  // Results
   result: CalculationResult;
   readings: ReadingInput[];
-  
-  // Optional content
   conclusion?: string;
   chartImageBase64?: string;
-  
-  // Site images (max 4)
   siteImages?: ReportImage[];
-  
-  // Field readings (uploaded PDFs)
   fieldReadings?: FieldReadingFile[];
-  
-  // Calibration certificates (uploaded PDFs)
   calibrationCertificates?: CalibrationCertificateFile[];
 }
 
@@ -93,29 +79,20 @@ interface LoadSequenceStep {
 }
 
 /**
- * Generate the load sequence table data.
- * Why: Creates the loading and unloading sequence based on IS 2911 requirements.
- * Load increments are 20% of design load, held for specified intervals.
+ * Generate RVPLT load sequence: 25% increments, 30–60 min hold at max.
+ * Why: IS 2911 Clause 7.1.5.1 specifies routine test procedure differs from initial (20%, 24h).
  */
-function generateLoadSequence(
+function generateLoadSequenceRvplt(
   designLoadT: number,
   testLoadT: number,
   ramAreaCm2: number
 ): LoadSequenceStep[] {
   const steps: LoadSequenceStep[] = [];
-  
-  // Load increment is 20% of design load
-  const incrementT = designLoadT * 0.2;
-  
-  // Calculate pressure for a given load: pressure = (load × 1000) / ramArea
-  const loadToPressure = (loadMT: number): number => {
-    return Math.round((loadMT * 1000) / ramAreaCm2);
-  };
-  
+  const incrementT = designLoadT * 0.25;
+  const loadToPressure = (loadMT: number): number =>
+    Math.round((loadMT * 1000) / ramAreaCm2);
   let srNo = 1;
-  
-  // Loading phase: 0 to test load
-  let currentLoad = 0;
+
   steps.push({
     srNo: srNo++,
     pressureKgCm2: 0,
@@ -123,8 +100,8 @@ function generateLoadSequence(
     readingTime: '0',
     isUnloading: false,
   });
-  
-  currentLoad = incrementT;
+
+  let currentLoad = incrementT;
   while (currentLoad < testLoadT) {
     steps.push({
       srNo: srNo++,
@@ -135,18 +112,16 @@ function generateLoadSequence(
     });
     currentLoad += incrementT;
   }
-  
-  // Maximum test load with 24-hour hold
+
   steps.push({
     srNo: srNo++,
     pressureKgCm2: loadToPressure(testLoadT),
     loadMT: parseFloat(testLoadT.toFixed(2)),
-    readingTime: '24 hours (1440 mins)',
+    readingTime: '30–60 mins',
     isUnloading: false,
     isMaxHold: true,
   });
-  
-  // Unloading phase: test load back to 0 in same increments
+
   currentLoad = testLoadT - incrementT;
   while (currentLoad > 0) {
     steps.push({
@@ -158,8 +133,7 @@ function generateLoadSequence(
     });
     currentLoad -= incrementT;
   }
-  
-  // Final unload to zero
+
   steps.push({
     srNo: srNo++,
     pressureKgCm2: 0,
@@ -167,29 +141,25 @@ function generateLoadSequence(
     readingTime: '1, 5, 15 mins',
     isUnloading: true,
   });
-  
+
   return steps;
 }
 
 /**
- * Generate HTML rows for the load sequence table.
+ * Generate HTML rows for the RVPLT load sequence table.
  * Why: Separated to avoid nested template literal issues in the main template.
  */
-function generateLoadSequenceTableHtml(
+function generateLoadSequenceTableHtmlRvplt(
   designLoadT: number,
   testLoadT: number,
   ramAreaCm2: number
 ): string {
-  const loadSequence = generateLoadSequence(designLoadT, testLoadT, ramAreaCm2);
-  const loadingSteps = loadSequence.filter(s => !s.isUnloading);
-  const unloadingSteps = loadSequence.filter(s => s.isUnloading);
-  
+  const loadSequence = generateLoadSequenceRvplt(designLoadT, testLoadT, ramAreaCm2);
+  const loadingSteps = loadSequence.filter((s) => !s.isUnloading);
+  const unloadingSteps = loadSequence.filter((s) => s.isUnloading);
   let html = '';
-  
-  // Loading section header
+
   html += '<tr class="section-header"><td colspan="4">Loading Phase</td></tr>';
-  
-  // Loading steps
   loadingSteps.forEach((step) => {
     const rowClass = step.isMaxHold ? 'row-max-hold' : 'row-loading';
     html += '<tr class="' + rowClass + '">';
@@ -199,11 +169,8 @@ function generateLoadSequenceTableHtml(
     html += '<td>' + step.readingTime + '</td>';
     html += '</tr>';
   });
-  
-  // Unloading section header
+
   html += '<tr class="section-header"><td colspan="4">Unloading Phase</td></tr>';
-  
-  // Unloading steps
   unloadingSteps.forEach((step) => {
     html += '<tr class="row-unloading">';
     html += '<td>' + step.srNo + '</td>';
@@ -212,7 +179,7 @@ function generateLoadSequenceTableHtml(
     html += '<td>' + step.readingTime + '</td>';
     html += '</tr>';
   });
-  
+
   return html;
 }
 
@@ -235,16 +202,13 @@ interface ExtendedReadingInput extends ReadingInput {
  * Why: Creates a field-sheet style table with phase headers and all dial gauge readings.
  */
 function generateObservationSheetHtml(readings: ReadingInput[]): string {
-  // Cast to extended type if additional fields are available
   const extendedReadings = readings as ExtendedReadingInput[];
-  
-  // Phase colors matching data entry
   const phaseColors: Record<string, { bg: string; text: string }> = {
     LOADING: { bg: '#2563eb', text: '#ffffff' },
     HOLD: { bg: '#d97706', text: '#ffffff' },
     UNLOADING: { bg: '#16a34a', text: '#ffffff' },
   };
-  
+
   let html = `
     <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
       <thead>
@@ -269,41 +233,41 @@ function generateObservationSheetHtml(readings: ReadingInput[]): string {
       </thead>
       <tbody>
   `;
-  
+
   let prevPhase: string | null = null;
   let prevLoad: number | null = null;
   let prevDate: string | null = null;
-  
+
   extendedReadings.forEach((reading, index) => {
     const phase = reading.phase;
     const phaseStyle = phaseColors[phase] || phaseColors.LOADING;
-    
-    // Format date and time from timestamp if available
     let dateStr = '-';
     let timeStr = '-';
     if (reading.timestamp) {
       try {
         const date = new Date(reading.timestamp);
-        dateStr = date.toLocaleDateString('en-GB', { 
-          day: '2-digit', 
-          month: '2-digit', 
-          year: 'numeric',
-          timeZone: 'Asia/Kolkata'
-        }).replace(/\//g, '/');
-        timeStr = date.toLocaleTimeString('en-US', { 
-          hour: '2-digit', 
-          minute: '2-digit', 
+        dateStr = date
+          .toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            timeZone: 'Asia/Kolkata',
+          })
+          .replace(/\//g, '/');
+        timeStr = date.toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
           hour12: false,
-          timeZone: 'Asia/Kolkata'
+          timeZone: 'Asia/Kolkata',
         });
       } catch {
         // Keep defaults
       }
     }
-    
-    // Show phase header when phase changes
+
     if (phase !== prevPhase) {
-      const phaseName = phase === 'HOLD' ? 'Holding' : phase.charAt(0) + phase.slice(1).toLowerCase();
+      const phaseName =
+        phase === 'HOLD' ? 'Holding' : phase.charAt(0) + phase.slice(1).toLowerCase();
       html += `
         <tr>
           <td colspan="10" style="background: ${phaseStyle.bg}; color: ${phaseStyle.text}; text-align: center; padding: 6px; font-weight: 600; border: 1px solid #cbd5e1;">
@@ -313,15 +277,12 @@ function generateObservationSheetHtml(readings: ReadingInput[]): string {
       `;
       prevPhase = phase;
     }
-    
-    // Only show date if it changed
+
     const showDate = dateStr !== prevDate || index === 0;
     prevDate = dateStr;
-    
-    // Only show load if it changed
     const loadChanged = prevLoad === null || reading.loadT !== prevLoad;
     prevLoad = reading.loadT;
-    
+
     html += `
       <tr style="border-bottom: 1px solid #e2e8f0;">
         <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center; font-weight: ${showDate ? '600' : '400'};">${showDate ? dateStr : ''}</td>
@@ -337,21 +298,19 @@ function generateObservationSheetHtml(readings: ReadingInput[]): string {
       </tr>
     `;
   });
-  
+
   html += `
       </tbody>
     </table>
   `;
-  
   return html;
 }
 
 /**
- * Generate the complete IVPLT report HTML.
- * Why: Creates a professional, printable HTML document for PDF conversion.
- * Structure follows IS 2911 standard report format.
+ * Generate the complete RVPLT report HTML.
+ * Why: Creates a professional, printable HTML document for PDF conversion per IS 2911 Clause 7.1.5.1.
  */
-export function generateIvpltReportHtml(data: IvpltReportData): string {
+export function generateRvpltReportHtml(data: RvpltReportData): string {
   const {
     projectName,
     client,
@@ -372,7 +331,6 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
     result,
     readings,
     conclusion,
-    chartImageBase64,
     siteImages = [],
     fieldReadings = [],
     calibrationCertificates = [],
@@ -384,8 +342,6 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
         'January', 'February', 'March', 'April', 'May', 'June',
         'July', 'August', 'September', 'October', 'November', 'December',
       ];
-
-      // ISO format: YYYY-MM-DD (with optional time suffix)
       const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
       if (isoMatch) {
         const year = Number(isoMatch[1]);
@@ -394,8 +350,6 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
         const name = monthNames[month - 1];
         if (name) return `${String(day).padStart(2, '0')} ${name} ${year}`;
       }
-
-      // DD/MM/YYYY or DD-MM-YYYY — always day-first for Indian field sheets
       const dmyMatch = dateStr.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
       if (dmyMatch) {
         const day = Number(dmyMatch[1]);
@@ -404,8 +358,6 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
         const name = monthNames[month - 1];
         if (name) return `${String(day).padStart(2, '0')} ${name} ${year}`;
       }
-
-      // DD/MM/YY or DD-MM-YY — 2-digit year, day-first
       const shortMatch = dateStr.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2})$/);
       if (shortMatch) {
         const day = Number(shortMatch[1]);
@@ -414,19 +366,14 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
         const name = monthNames[month - 1];
         if (name) return `${String(day).padStart(2, '0')} ${name} ${year}`;
       }
-
       return dateStr;
     } catch {
       return dateStr;
     }
   };
 
-  // Get specific images for cover and TOC pages
   const coverImage = siteImages[0];
   const tocImage = siteImages[1];
-
-  // Note: Page numbers are handled dynamically by Puppeteer footer template.
-  // TOC uses section numbers only (no static page references).
 
   return `
 <!DOCTYPE html>
@@ -434,7 +381,7 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>IVPLT Report - ${pileId}</title>
+  <title>RVPLT Report - ${pileId}</title>
   <style>
     * {
       margin: 0;
@@ -461,7 +408,6 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
       page-break-after: auto;
     }
 
-    /* Header on each page */
     .page-header {
       position: absolute;
       top: 15px;
@@ -475,7 +421,6 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
       padding-bottom: 8px;
     }
     
-    /* Cover Page Styles */
     .cover-page {
       display: flex;
       flex-direction: column;
@@ -560,7 +505,6 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
       color: #1e40af;
     }
 
-    /* TOC Page Styles */
     .toc-page {
       padding-top: 50px;
     }
@@ -614,7 +558,6 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
       object-fit: contain;
     }
     
-    /* Content Page Styles */
     .content-page {
       padding-top: 50px;
     }
@@ -651,7 +594,6 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
       margin-bottom: 8px;
     }
     
-    /* Tables */
     table {
       width: 100%;
       border-collapse: collapse;
@@ -680,7 +622,6 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
       font-weight: 600;
     }
     
-    /* Chart Page - KEY PAGE */
     .chart-page {
       padding-top: 50px;
     }
@@ -755,7 +696,6 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
       color: ${result.isPassed ? '#15803d' : '#b91c1c'};
     }
     
-    /* Data Table */
     .data-table {
       font-size: 9pt;
     }
@@ -780,7 +720,6 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
     .phase-hold { color: #d97706; font-weight: 600; }
     .phase-unloading { color: #16a34a; font-weight: 600; }
     
-    /* Load Sequence Table Styles */
     .load-sequence-section {
       margin-top: 25px;
     }
@@ -862,7 +801,6 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
       text-align: center;
     }
     
-    /* Site Images Section */
     .images-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -890,7 +828,6 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
       background: #f8fafc;
     }
     
-    /* Signature Section */
     .signature-section {
       margin-top: 60px;
     }
@@ -923,14 +860,13 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
   </style>
 </head>
 <body>
-  <!-- Page 1: Cover Page -->
   <div class="page cover-page">
     <div class="cover-title">
-      <h1>INITIAL STATIC VERTICAL PILE LOAD TEST</h1>
+      <h1>ROUTINE STATIC VERTICAL PILE LOAD TEST</h1>
       <h1>ON ${pileDiameterMm}mm DIA PILE</h1>
       <h2>FOR ${projectName}</h2>
       <h2>AT ${location}</h2>
-      <p style="margin-top: 15px; font-size: 12pt; color: #64748b;">(TEST PILE ${pileId})</p>
+      <p style="margin-top: 15px; font-size: 12pt; color: #64748b;">(ROUTINE TEST PILE ${pileId})</p>
     </div>
     
     <div class="cover-image">
@@ -946,15 +882,14 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
     </div>
     
     <div class="cover-badge">
-      <p>Test conducted as per IS 2911 (Part 4) - 2013</p>
+      <p>Test conducted as per IS 2911 (Part 4) - 2013, Clause 7.1.5.1</p>
     </div>
   </div>
 
-  <!-- Page 2: Table of Contents -->
   <div class="page toc-page">
     <div class="page-header">
       <span>${formatDate(testDate)}</span>
-      <span>IVPLT Report - ${pileId}</span>
+      <span>RVPLT Report - ${pileId}</span>
     </div>
     
     <h1 class="toc-title">Contents</h1>
@@ -979,46 +914,44 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
     ` : ''}
   </div>
 
-  <!-- Page 3: General -->
   <div class="page content-page">
     <div class="page-header">
       <span>${formatDate(testDate)}</span>
-      <span>IVPLT Report - ${pileId}</span>
+      <span>RVPLT Report - ${pileId}</span>
     </div>
     
     <div class="section">
       <h2 class="section-title">1.0 General</h2>
       <p>
         1.1 ${client} decided to carry out static pile testing work on ${pileDiameterMm}mm diameter pile 
-        to estimate load carrying capacity in vertical direction and settlement. This is the Initial 
+        to estimate load carrying capacity in vertical direction and settlement. This is the Routine 
         Vertical Pile Load Test at ${location}.
       </p>
       <p>
-        1.2 This report covers data for one vertical pile load test. This report covers calculation of 
-        safe load capacity for pile based on data collected during fieldwork.
+        1.2 This report covers data for one vertical pile load test. This report covers pass/fail 
+        assessment based on data collected during fieldwork as per IS 2911 (Part 4) Clause 7.1.5.1.
       </p>
       <p>
         1.3 The following codes of practices have been adopted:
       </p>
       <ul>
-        <li>IS 2911 (Part 4) - 2013 "Code of Practice for Design and Construction of Pile Foundations - Load Tests on Piles"</li>
+        <li>IS 2911 (Part 4) - 2013 "Code of Practice for Design and Construction of Pile Foundations - Load Tests on Piles" (Clause 7.1.5.1)</li>
         <li>IS 14593 - 1998 (Reaffirmed 2003) "Design and Construction of Bored Cast-in-Situ Piles Founded on Rocks – Guidelines"</li>
       </ul>
     </div>
   </div>
 
-  <!-- Page 4: Scope of Work -->
   <div class="page content-page">
     <div class="page-header">
       <span>${formatDate(testDate)}</span>
-      <span>IVPLT Report - ${pileId}</span>
+      <span>RVPLT Report - ${pileId}</span>
     </div>
     
     <div class="section">
       <h2 class="section-title">2.0 Scope of Work</h2>
       <p>Pile details are tabulated as below.</p>
       
-      <h3>2.1 Pile Details for Initial Pile (Vertical Load Test)</h3>
+      <h3>2.1 Pile Details for Routine Pile (Vertical Load Test)</h3>
       <table class="specs-table">
         <tr><td>Location</td><td>${location}</td></tr>
         <tr><td>Pile ID</td><td>${pileId}</td></tr>
@@ -1028,9 +961,9 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
         <tr><td>Maximum Vertical Safe Capacity</td><td>${designLoadT} MT</td></tr>
       </table>
       
-      <h3>2.2 Vertical Test Load for Initial Pile</h3>
+      <h3>2.2 Vertical Test Load for Routine Pile</h3>
       <p>The design vertical load on the pile is <strong>${designLoadT} MT</strong>.</p>
-      <p>The pile is required to be tested to a load of <strong>${testLoadT} MT</strong> (2.5 × design load).</p>
+      <p>The pile is required to be tested to a load of <strong>${testLoadT} MT</strong> (1.5 × design load).</p>
       
       <h3>2.3 Equipment Details</h3>
       <table class="specs-table">
@@ -1041,18 +974,17 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
     </div>
   </div>
 
-  <!-- Page 5: Methodology -->
   <div class="page content-page">
     <div class="page-header">
       <span>${formatDate(testDate)}</span>
-      <span>IVPLT Report - ${pileId}</span>
+      <span>RVPLT Report - ${pileId}</span>
     </div>
     
     <div class="section">
       <h2 class="section-title">3.0 Methodology</h2>
       <p>
-        The Initial Vertical Pile Load Test was conducted in accordance with IS 2911 (Part 4) - 2013 
-        "Code of Practice for Design and Construction of Pile Foundations - Load Test on Piles".
+        The Routine Vertical Pile Load Test was conducted in accordance with IS 2911 (Part 4) - 2013 
+        Clause 7.1.5.1 "Code of Practice for Design and Construction of Pile Foundations - Load Test on Piles".
       </p>
       
       <h3>3.1 Test Setup</h3>
@@ -1064,28 +996,26 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
       
       <h3>3.2 Test Procedure</h3>
       <ol>
-        <li>Load was applied in increments of approximately 20% of design load (${(designLoadT * 0.2).toFixed(1)} MT) up to the test load of ${testLoadT} MT.</li>
+        <li>Load was applied in increments of approximately 25% of design load (${(designLoadT * 0.25).toFixed(1)} MT) up to the test load of ${testLoadT} MT.</li>
         <li>Each load increment was maintained until the rate of settlement was less than 0.1mm/hour, or for a minimum of 1 hour.</li>
-        <li>Maximum load was maintained for 24 hours as per IS 2911 requirements for initial tests.</li>
+        <li>Maximum load was maintained for 30–60 minutes as per IS 2911 Clause 7.1.5.1 for routine tests.</li>
         <li>Load was released in the same increments as the loading phase.</li>
         <li>Settlement readings were recorded at each load increment using four dial gauges positioned at 90° intervals.</li>
       </ol>
       
-      <h3>3.3 Acceptance Criteria (IS 2911 Part 4)</h3>
-      <p>As per IS 2911 (Part 4) - 2013, the acceptance criteria for Initial Vertical Pile Load Test are:</p>
+      <h3>3.3 Acceptance Criteria (IS 2911 Part 4, Clause 7.1.5.1)</h3>
+      <p>As per IS 2911 (Part 4) - 2013 Clause 7.1.5.1, the acceptance criteria for Routine Vertical Pile Load Test are:</p>
       <ol>
-        <li>Net settlement at design load shall not exceed 12mm or 2% of pile diameter (${(0.02 * pileDiameterMm).toFixed(1)}mm), whichever is less.</li>
-        <li>Safe load shall be taken as two-thirds of the load at which total settlement equals 12mm.</li>
-        <li>Safe load shall not exceed half the load at which total settlement equals 10% of pile diameter (${(0.1 * pileDiameterMm).toFixed(1)}mm).</li>
+        <li>Net settlement at design load shall not exceed 12mm or 2% of pile diameter (${(0.02 * pileDiameterMm).toFixed(1)}mm), whichever is less (for piles ≤600mm dia).</li>
+        <li>For piles &gt;600mm diameter: net settlement shall not exceed 18mm or 2% of pile diameter, whichever is less.</li>
       </ol>
     </div>
   </div>
 
-  <!-- Page 6: Load Increment Summary / Load Sequence -->
   <div class="page content-page">
     <div class="page-header">
       <span>${formatDate(testDate)}</span>
-      <span>IVPLT Report - ${pileId}</span>
+      <span>RVPLT Report - ${pileId}</span>
     </div>
     
     <div class="section">
@@ -1094,8 +1024,8 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
       <div class="load-sequence-intro">
         <p><span class="param-label">Jack Ram Area:</span> <span class="param-value">${ramAreaCm2} cm²</span></p>
         <p><span class="param-label">Design Load:</span> <span class="param-value">${designLoadT} MT</span></p>
-        <p><span class="param-label">Test Load (2.5× Design):</span> <span class="param-value">${testLoadT} MT</span></p>
-        <p><span class="param-label">Load Increment (20% of Design):</span> <span class="param-value">${(designLoadT * 0.2).toFixed(1)} MT</span></p>
+        <p><span class="param-label">Test Load (1.5× Design):</span> <span class="param-value">${testLoadT} MT</span></p>
+        <p><span class="param-label">Load Increment (25% of Design):</span> <span class="param-value">${(designLoadT * 0.25).toFixed(1)} MT</span></p>
         <p style="margin-top: 10px; font-size: 9pt; color: #64748b; font-style: italic;">
           Note: As the least count of the pressure gauge is limited, exact incremental loads may not be attained. 
           Hence, values close to the incremental load are considered.
@@ -1105,7 +1035,7 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
       <h3>Table 1 – Load Sequence</h3>
       <p style="margin-bottom: 10px; font-size: 10pt;">
         The sequence of loading and unloading shall be as described below for 
-        <strong>IVPLT on ${pileDiameterMm}mm Dia Pile (${designLoadT} MT Design Load)</strong>.
+        <strong>RVPLT on ${pileDiameterMm}mm Dia Pile (${designLoadT} MT Design Load)</strong>.
       </p>
       
       <table class="load-sequence-table">
@@ -1118,51 +1048,43 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
           </tr>
         </thead>
         <tbody>
-          ${generateLoadSequenceTableHtml(designLoadT, testLoadT, ramAreaCm2)}
+          ${generateLoadSequenceTableHtmlRvplt(designLoadT, testLoadT, ramAreaCm2)}
         </tbody>
       </table>
     </div>
   </div>
 
-  <!-- Page 7: Results -->
   <div class="page content-page">
     <div class="page-header">
       <span>${formatDate(testDate)}</span>
-      <span>IVPLT Report - ${pileId}</span>
+      <span>RVPLT Report - ${pileId}</span>
     </div>
     
     <div class="section">
       <h2 class="section-title">4.0 Results</h2>
       
-      <h3>4.1 Test Results Summary</h3>
+      <h3>4.1 Settlement Analysis</h3>
       <table class="specs-table">
         <tr><td>Maximum Settlement Recorded</td><td>${result.maxSettlementMm.toFixed(2)} mm</td></tr>
         <tr><td>Elastic Rebound</td><td>${result.elasticReboundMm.toFixed(2)} mm</td></tr>
         <tr><td>Net Settlement (Max - Rebound)</td><td>${result.netSettlementMm.toFixed(2)} mm</td></tr>
         <tr><td>Settlement Limit (IS 2911)</td><td>${result.settlementLimitMm} mm</td></tr>
-        <tr><td>Safe Load Adopted</td><td>${result.safeLoadAdoptedT.toFixed(1)} MT</td></tr>
-        <tr><td>Governing Criterion</td><td>${result.governingCriterion}</td></tr>
         <tr><td>Test Status</td><td style="color: ${result.isPassed ? '#16a34a' : '#dc2626'}; font-weight: bold;">${result.isPassed ? 'PASSED' : 'FAILED'}</td></tr>
       </table>
       
-      <h3>4.2 Assessment</h3>
+      <h3>4.2 Acceptance Criteria Check</h3>
       <p>
         The net settlement of ${result.netSettlementMm.toFixed(2)} mm is 
         ${result.netSettlementMm <= result.settlementLimitMm ? 'within' : 'exceeding'} 
-        the permissible limit of ${result.settlementLimitMm} mm as per IS 2911 (Part 4) - 2013.
-      </p>
-      <p>
-        The safe load adopted for the pile is <strong>${result.safeLoadAdoptedT.toFixed(1)} MT</strong> 
-        based on the ${result.governingCriterion.toLowerCase()} criterion.
+        the permissible limit of ${result.settlementLimitMm} mm as per IS 2911 (Part 4) Clause 7.1.5.1.
       </p>
     </div>
   </div>
 
-  <!-- Page 7: Chart Page (KEY PAGE) -->
   <div class="page chart-page">
     <div class="page-header">
       <span>${formatDate(testDate)}</span>
-      <span>IVPLT Report - ${pileId}</span>
+      <span>RVPLT Report - ${pileId}</span>
     </div>
     
     <div class="section">
@@ -1176,7 +1098,7 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
       
       <div style="text-align: center; margin-top: 8px; padding: 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">
         <p style="font-size: 11pt; font-weight: 600; color: #1e293b; margin: 0;">
-          Maximum Settlement at ${readings.length > 0 ? Math.max(...readings.map(r => r.loadT)).toFixed(2) : '0.00'} T: ${result.maxSettlementMm.toFixed(2)} mm
+          Maximum Settlement at ${readings.length > 0 ? Math.max(...readings.map((r) => r.loadT)).toFixed(2) : '0.00'} T: ${result.maxSettlementMm.toFixed(2)} mm
         </p>
       </div>
       
@@ -1205,23 +1127,21 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
       
       <div class="chart-summary" style="padding: 10px 15px; margin-top: 10px;">
         <h3 style="font-size: 14pt;">TEST ${result.isPassed ? 'PASSED ✓' : 'FAILED ✗'}</h3>
-        <p style="font-size: 10pt;">Net settlement ${result.netSettlementMm.toFixed(2)}mm is ${result.netSettlementMm <= result.settlementLimitMm ? 'within' : 'exceeding'} the ${result.settlementLimitMm}mm limit (IS 2911 Part 4)</p>
+        <p style="font-size: 10pt;">Net settlement ${result.netSettlementMm.toFixed(2)}mm is ${result.netSettlementMm <= result.settlementLimitMm ? 'within' : 'exceeding'} the ${result.settlementLimitMm}mm limit (IS 2911 Part 4, Clause 7.1.5.1)</p>
       </div>
     </div>
   </div>
 
-  <!-- Page 8: Loading/Unloading Deflection Summary -->
   <div class="page content-page">
     <div class="page-header">
       <span>${formatDate(testDate)}</span>
-      <span>IVPLT Report - ${pileId}</span>
+      <span>RVPLT Report - ${pileId}</span>
     </div>
     
     <div class="section">
       <h2 class="section-title">5.1 Record of Pile Load Test</h2>
       
       <div style="display: flex; gap: 30px; margin-top: 20px;">
-        <!-- Loading Table -->
         <div style="flex: 1;">
           <h3 style="text-align: center; font-size: 11pt; font-weight: bold; margin-bottom: 10px; text-transform: uppercase;">Loading</h3>
           <table style="width: 100%; border-collapse: collapse; font-size: 10pt;">
@@ -1233,37 +1153,35 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
             </thead>
             <tbody>
               ${(() => {
-                // Loading table should use only LOADING rows, plus final HOLD row at max load.
-                const loadingOnly = readings.filter(r => r.phase === 'LOADING');
+                const loadingOnly = readings.filter((r) => r.phase === 'LOADING');
                 const loadingByLoad: Record<string, number> = {};
-                loadingOnly.forEach(r => {
-                  const loadKey = r.loadT.toFixed(2);
-                  loadingByLoad[loadKey] = r.avgSettlementMm;
+                loadingOnly.forEach((r) => {
+                  loadingByLoad[r.loadT.toFixed(2)] = r.avgSettlementMm;
                 });
-
-                // Replace max-load point with end-of-hold value when HOLD exists.
-                const holdRows = readings.filter(r => r.phase === 'HOLD');
+                const holdRows = readings.filter((r) => r.phase === 'HOLD');
                 if (holdRows.length > 0 && loadingOnly.length > 0) {
-                  const maxLoad = Math.max(...loadingOnly.map(r => r.loadT));
+                  const maxLoad = Math.max(...loadingOnly.map((r) => r.loadT));
                   const endHold = holdRows[holdRows.length - 1];
                   loadingByLoad[maxLoad.toFixed(2)] = endHold.avgSettlementMm;
                 }
-
                 const loadingData = Object.entries(loadingByLoad)
                   .map(([load, settlement]) => ({ load: parseFloat(load), settlement }))
                   .sort((a, b) => a.load - b.load);
-                return loadingData.map(d => `
+                return loadingData
+                  .map(
+                    (d) => `
                   <tr>
                     <td style="border: 1px solid #000; padding: 6px 10px; text-align: center;">${d.load.toFixed(2)}</td>
                     <td style="border: 1px solid #000; padding: 6px 10px; text-align: center;">${d.settlement.toFixed(2)}</td>
                   </tr>
-                `).join('');
+                `
+                  )
+                  .join('');
               })()}
             </tbody>
           </table>
         </div>
         
-        <!-- Unloading Table -->
         <div style="flex: 1;">
           <h3 style="text-align: center; font-size: 11pt; font-weight: bold; margin-bottom: 10px; text-transform: uppercase;">Unloading</h3>
           <table style="width: 100%; border-collapse: collapse; font-size: 10pt;">
@@ -1275,21 +1193,24 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
             </thead>
             <tbody>
               ${(() => {
-                const unloadingReadings = readings.filter(r => r.phase === 'UNLOADING');
+                const unloadingReadings = readings.filter((r) => r.phase === 'UNLOADING');
                 const unloadingByLoad: Record<string, number> = {};
-                unloadingReadings.forEach(r => {
-                  const loadKey = r.loadT.toFixed(2);
-                  unloadingByLoad[loadKey] = r.avgSettlementMm;
+                unloadingReadings.forEach((r) => {
+                  unloadingByLoad[r.loadT.toFixed(2)] = r.avgSettlementMm;
                 });
                 const unloadingData = Object.entries(unloadingByLoad)
                   .map(([load, settlement]) => ({ load: parseFloat(load), settlement }))
                   .sort((a, b) => b.load - a.load);
-                return unloadingData.map(d => `
+                return unloadingData
+                  .map(
+                    (d) => `
                   <tr>
                     <td style="border: 1px solid #000; padding: 6px 10px; text-align: center;">${d.load.toFixed(2)}</td>
                     <td style="border: 1px solid #000; padding: 6px 10px; text-align: center;">${d.settlement.toFixed(2)}</td>
                   </tr>
-                `).join('');
+                `
+                  )
+                  .join('');
               })()}
             </tbody>
           </table>
@@ -1298,27 +1219,25 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
     </div>
   </div>
 
-  <!-- Page 9: Conclusion -->
   <div class="page content-page">
     <div class="page-header">
       <span>${formatDate(testDate)}</span>
-      <span>IVPLT Report - ${pileId}</span>
+      <span>RVPLT Report - ${pileId}</span>
     </div>
     
     <div class="section">
       <h2 class="section-title">6.0 Conclusion</h2>
       ${conclusion ? `<p>${conclusion}</p>` : `
         <p>
-          Based on the Initial Vertical Pile Load Test conducted on pile ${pileId} at ${location}, 
+          Based on the Routine Vertical Pile Load Test conducted on pile ${pileId} at ${location}, 
           the following observations and conclusions are drawn:
         </p>
         <ol>
-          <li>The pile was loaded up to ${testLoadT.toFixed(1)} MT (2.5 times the design load of ${designLoadT} MT) as per IS 2911 (Part 4) - 2013.</li>
+          <li>The pile was loaded up to ${testLoadT.toFixed(1)} MT (1.5 times the design load of ${designLoadT} MT) as per IS 2911 (Part 4) Clause 7.1.5.1.</li>
           <li>The maximum settlement recorded at test load was ${result.maxSettlementMm.toFixed(2)} mm.</li>
           <li>After complete unloading, the elastic rebound was ${result.elasticReboundMm.toFixed(2)} mm.</li>
           <li>The net settlement (residual) is ${result.netSettlementMm.toFixed(2)} mm, which is ${result.netSettlementMm <= result.settlementLimitMm ? 'within' : 'exceeding'} the permissible limit of ${result.settlementLimitMm} mm.</li>
-          <li>The safe load adopted for the pile is ${result.safeLoadAdoptedT.toFixed(1)} MT based on the ${result.governingCriterion.toLowerCase()} criterion.</li>
-          <li><strong>The pile ${result.isPassed ? 'HAS PASSED' : 'HAS FAILED'} the Initial Vertical Pile Load Test as per IS 2911 (Part 4) - 2013.</strong></li>
+          <li><strong>The pile ${result.isPassed ? 'HAS PASSED' : 'HAS FAILED'} the Routine Vertical Pile Load Test as per IS 2911 (Part 4) Clause 7.1.5.1.</strong></li>
         </ol>
         ${result.isPassed ? `
           <p style="margin-top: 20px;">
@@ -1333,66 +1252,64 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
     </div>
   </div>
 
-  <!-- Page 9+: Observation Sheet - Field Sheet Style -->
   <div class="page content-page">
     <div class="page-header">
       <span>${formatDate(testDate)}</span>
-      <span>IVPLT Report - ${pileId}</span>
+      <span>RVPLT Report - ${pileId}</span>
     </div>
     
     <div class="section">
       <h2 class="section-title">7.0 Observation Sheet</h2>
-      <p style="font-size: 10pt; color: #64748b; margin-bottom: 15px;">Load increment readings as per IS 2911 (Part 4)</p>
+      <p style="font-size: 10pt; color: #64748b; margin-bottom: 15px;">Load increment readings as per IS 2911 (Part 4) Clause 7.1.5.1</p>
       
       ${generateObservationSheetHtml(readings)}
     </div>
   </div>
 
   ${siteImages.length > 0 ? `
-  <!-- Site Images Page - Full A4 page divided into 4 equal quadrants -->
   <div class="page" style="padding: 0; margin: 0; height: 100vh; box-sizing: border-box; overflow: hidden;">
-    <!-- Page header -->
     <div style="position: absolute; top: 15px; left: 40px; right: 40px; display: flex; justify-content: space-between; font-size: 9pt; color: #64748b; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; z-index: 10;">
       <span>${formatDate(testDate)}</span>
-      <span>IVPLT Report - ${pileId}</span>
+      <span>RVPLT Report - ${pileId}</span>
     </div>
     
-    <!-- Section title -->
     <div style="position: absolute; top: 45px; left: 40px; right: 40px; z-index: 10;">
       <h2 style="font-size: 14pt; color: #1e40af; border-bottom: 2px solid #1e40af; padding-bottom: 8px; margin: 0;">8.0 Site Images</h2>
     </div>
     
-    <!-- 2x2 Grid - Fixed height to fit A4 page (842pt height - header/title/margins) -->
     <div style="position: absolute; top: 90px; left: 40px; right: 40px; bottom: 40px; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 12px;">
-      ${[0, 1, 2, 3].map(idx => {
-        const img = siteImages[idx];
-        return `
+      ${[0, 1, 2, 3]
+        .map((idx) => {
+          const img = siteImages[idx];
+          return `
           <div style="border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; background: #f8fafc;">
-            ${img ? `
+            ${img
+              ? `
               <div style="flex: 1; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 8px; min-height: 0;">
                 <img src="${img.url}" alt="Site Image ${idx + 1}" style="max-width: 100%; max-height: 100%; object-fit: contain;" />
               </div>
               <div style="padding: 6px 8px; font-size: 8pt; color: #475569; text-align: center; background: #e2e8f0; border-top: 1px solid #cbd5e1; flex-shrink: 0;">
                 ${img.caption || `Image ${idx + 1}`}
               </div>
-            ` : `
+            `
+              : `
               <div style="flex: 1; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 10pt;">
                 No Image
               </div>
             `}
           </div>
         `;
-      }).join('')}
+        })
+        .join('')}
     </div>
   </div>
   ` : ''}
 
   ${fieldReadings.length > 0 ? `
-  <!-- Field Readings Reference Page -->
   <div class="page content-page">
     <div class="page-header">
       <span>${formatDate(testDate)}</span>
-      <span>IVPLT Report - ${pileId}</span>
+      <span>RVPLT Report - ${pileId}</span>
     </div>
     
     <div class="section" style="display: flex; align-items: center; justify-content: center; min-height: 60vh;">
@@ -1408,11 +1325,10 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
   ` : ''}
 
   ${calibrationCertificates.length > 0 ? `
-  <!-- Calibration Certificates Reference Page -->
   <div class="page content-page">
     <div class="page-header">
       <span>${formatDate(testDate)}</span>
-      <span>IVPLT Report - ${pileId}</span>
+      <span>RVPLT Report - ${pileId}</span>
     </div>
     
     <div class="section" style="display: flex; align-items: center; justify-content: center; min-height: 60vh;">
@@ -1427,11 +1343,10 @@ export function generateIvpltReportHtml(data: IvpltReportData): string {
   </div>
   ` : ''}
 
-  <!-- Signature Page -->
   <div class="page content-page">
     <div class="page-header">
       <span>${formatDate(testDate)}</span>
-      <span>IVPLT Report - ${pileId}</span>
+      <span>RVPLT Report - ${pileId}</span>
     </div>
     
     <div class="signature-section">

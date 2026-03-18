@@ -379,7 +379,7 @@ USER (WhatsApp)                     OPENCLAW AGENT                     MCP SERVE
 │   │
 │   │  ## Test Types Supported
 │   │  - IVPLT, RVPLT, LATERAL, UPLIFT
-│   │  - Currently only IVPLT has full engine + template
+│   │  - All 4 types have full engine + template + pipeline wiring
 │
 ├── MEMORY.md            ← Long-term curated memory
 │   │

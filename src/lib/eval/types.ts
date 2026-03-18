@@ -33,6 +33,7 @@ export interface ExpectedProjectInfo {
   concreteGrade: string;  // M25, M35, etc.
   testDate: string;       // ISO date
   dateOfCasting?: string; // ISO date
+  testType?: string;      // IVPLT, RVPLT, LATERAL, UPLIFT
 }
 
 /**

@@ -571,7 +571,7 @@ export async function POST(request: NextRequest) {
     const fields: (keyof ExpectedProjectInfo)[] = [
       'pileId', 'reportNo', 'project', 'location', 'client', 'contractor',
       'pileDiameter', 'pileDepth', 'designLoad', 'testLoad', 'ramArea',
-      'concreteGrade', 'testDate', 'dateOfCasting'
+      'concreteGrade', 'testDate', 'dateOfCasting', 'testType'
     ];
     
     for (const field of fields) {

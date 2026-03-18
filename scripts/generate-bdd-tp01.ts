@@ -5,10 +5,23 @@ import { generateIvpltReportHtml } from '../src/lib/pdf/templates/ivplt-template
 import fs from 'fs/promises';
 import path from 'path';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasources: { db: { url: process.env.DATABASE_URL } },
+});
 
 async function main() {
-  const ingest = JSON.parse(await fs.readFile('/tmp/bdd-tp01-ingest.json', 'utf-8'));
+  await prisma.$connect();
+
+  const ingestPath = '/tmp/bdd-tp01-ingest.json';
+  try {
+    await fs.access(ingestPath);
+  } catch {
+    console.error(`❌ Ingest file not found at ${ingestPath}`);
+    console.error('   Run the ingest script first (e.g. scripts/ingest-bdd-tp01.ts)');
+    process.exit(1);
+  }
+
+  const ingest = JSON.parse(await fs.readFile(ingestPath, 'utf-8'));
   const rawReadings = ingest.readings as any[];
 
   let project = await prisma.project.findFirst({ where: { name: 'BDD CHAWLS Redevelopment Project, Worli Mumbai' } });
@@ -70,7 +83,8 @@ async function main() {
   };
 
   for (const r of rawReadings) {
-    const [y, m, d] = (r.date || '2025-12-09').split('-').map(Number);
+    const dateParts = (r.date || '2025-12-09').split('-').map(Number);
+    const [y, m, d] = dateParts[0] > 31 ? dateParts : [dateParts[2], dateParts[1], dateParts[0]];
     const [hh, mm] = (r.time || '00:00').split(':').map(Number);
     const recordedAt = new Date(Date.UTC(y, m - 1, d, hh - 5, mm - 30));
 

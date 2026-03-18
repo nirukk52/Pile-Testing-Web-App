@@ -9,8 +9,28 @@ import { getTestEngine } from '@/engines';
 import type { TestType, ReadingInput, TestMeta } from '@/engines';
 import { generatePDFWithPageNumbers } from '@/lib/pdf/generator';
 import { generateIvpltReportHtml, type IvpltReportData } from '@/lib/pdf/templates/ivplt-template';
+import { generateRvpltReportHtml } from '@/lib/pdf/templates/rvplt-template';
+import { generateLateralReportHtml } from '@/lib/pdf/templates/lateral-template';
+import { generateUpliftReportHtml } from '@/lib/pdf/templates/uplift-template';
 import { getPublicUrl, STORAGE_BUCKETS } from '@/lib/storage';
 import { mergePdfs } from '@/lib/pdf/merge';
+
+/**
+ * Why: Maps test type to its HTML template generator so the route
+ * dispatches to the correct report layout at runtime.
+ */
+const templateByType: Record<string, (data: IvpltReportData) => string> = {
+  IVPLT: generateIvpltReportHtml,
+  RVPLT: generateRvpltReportHtml,
+  LATERAL: generateLateralReportHtml,
+  UPLIFT: generateUpliftReportHtml,
+};
+const reportLabelByType: Record<string, string> = {
+  IVPLT: 'IVPLT Report',
+  RVPLT: 'RVPLT Report',
+  LATERAL: 'Lateral Load Test Report',
+  UPLIFT: 'Uplift Load Test Report',
+};
 
 interface RouteParams {
   params: Promise<{ testId: string }>;
@@ -116,7 +136,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       url: getPublicUrl(STORAGE_BUCKETS.CERTIFICATES, cert.storagePath),
     }));
 
-    // Build report data (GET - no chart, use POST for chart)
     const reportData: IvpltReportData = {
       projectName: test.project.name,
       client: test.project.client,
@@ -142,11 +161,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       calibrationCertificates: certificatesForReport,
     };
 
-    // Generate HTML
-    const html = generateIvpltReportHtml(reportData);
+    const generateHtmlGet = templateByType[test.testType] || generateIvpltReportHtml;
+    const html = generateHtmlGet(reportData);
 
-    // Generate main report PDF
-    let pdfBuffer = await generatePDFWithPageNumbers(html);
+    const reportLabelGet = reportLabelByType[test.testType] || 'IVPLT Report';
+    let pdfBuffer = await generatePDFWithPageNumbers(html, { reportLabel: reportLabelGet });
 
     // Merge field reading PDFs if any exist using authenticated Supabase download
     if (test.fieldReadings.length > 0) {
@@ -287,7 +306,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       url: getPublicUrl(STORAGE_BUCKETS.CERTIFICATES, cert.storagePath),
     }));
 
-    // Build report data (use chart from client if provided)
     const reportData: IvpltReportData = {
       projectName: test.project.name,
       client: test.project.client,
@@ -314,11 +332,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       calibrationCertificates: certificatesForReport,
     };
 
-    // Generate HTML
-    const html = generateIvpltReportHtml(reportData);
+    const generateHtmlPost = templateByType[test.testType] || generateIvpltReportHtml;
+    const html = generateHtmlPost(reportData);
 
-    // Generate main report PDF
-    let pdfBuffer = await generatePDFWithPageNumbers(html);
+    const reportLabelPost = reportLabelByType[test.testType] || 'IVPLT Report';
+    let pdfBuffer = await generatePDFWithPageNumbers(html, { reportLabel: reportLabelPost });
 
     // Merge field reading PDFs if any exist using authenticated Supabase download
     if (test.fieldReadings.length > 0) {

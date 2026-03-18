@@ -11,6 +11,31 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * Parses a date string into { year, month, day } without timezone ambiguity.
+ * Why: `new Date(str)` interprets DD/MM/YYYY as MM/DD in some environments.
+ * All field-sheet dates are day-first (DD-MM-YYYY).
+ */
+function parseDateParts(dateInput: string | Date): { year: number; month: number; day: number } | null {
+  if (dateInput instanceof Date) {
+    return { year: dateInput.getFullYear(), month: dateInput.getMonth() + 1, day: dateInput.getDate() };
+  }
+
+  // ISO: YYYY-MM-DD (with optional time suffix)
+  const iso = dateInput.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return { year: +iso[1], month: +iso[2], day: +iso[3] };
+
+  // DD/MM/YYYY or DD-MM-YYYY
+  const dmy = dateInput.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (dmy) return { year: +dmy[3], month: +dmy[2], day: +dmy[1] };
+
+  // DD/MM/YY or DD-MM-YY
+  const dmy2 = dateInput.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2})$/);
+  if (dmy2) return { year: 2000 + +dmy2[3], month: +dmy2[2], day: +dmy2[1] };
+
+  return null;
+}
+
+/**
  * Formats a date/timestamp string to dd/mm/yyyy format.
  * Why: Ensures consistent date display across the app per IS 2911 standards.
  * Uses IST (Asia/Kolkata) - all field times are in Indian Standard Time.
@@ -19,8 +44,11 @@ export function cn(...inputs: ClassValue[]) {
  */
 export function formatDateDDMMYYYY(dateInput: string | Date): string {
   try {
-    const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
-    // Use IST timezone for display (all projects are in India)
+    const parts = typeof dateInput === 'string' ? parseDateParts(dateInput) : null;
+    if (parts) {
+      return `${String(parts.day).padStart(2, '0')}/${String(parts.month).padStart(2, '0')}/${parts.year}`;
+    }
+    const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
     return date.toLocaleDateString('en-GB', {
       day: '2-digit',
       month: '2-digit',
@@ -41,7 +69,16 @@ export function formatDateDDMMYYYY(dateInput: string | Date): string {
  */
 export function formatDateLong(dateInput: string | Date): string {
   try {
-    const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    const parts = typeof dateInput === 'string' ? parseDateParts(dateInput) : null;
+    if (parts) {
+      const name = monthNames[parts.month - 1];
+      if (name) return `${String(parts.day).padStart(2, '0')} ${name} ${parts.year}`;
+    }
+    const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
     return date.toLocaleDateString('en-GB', {
       day: '2-digit',
       month: 'long',
