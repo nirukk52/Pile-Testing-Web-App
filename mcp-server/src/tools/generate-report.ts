@@ -8,6 +8,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import fs from "fs/promises";
 import path from "path";
+import { toSlug, resolveReportPath } from "@/lib/report-paths";
 
 const GenerateReportInputSchema = z.object({
   test_id: z.string().uuid().describe("UUID of the test to generate a report for"),
@@ -198,20 +199,13 @@ Returns:
           );
         }
 
-        const dateStr = test.testDate.toISOString().split("T")[0];
-        const filename = `${test.pileId}_${test.testType}_${dateStr}_Report.pdf`;
+        const slug = toSlug(test.pileId, test.testType);
+        const resolved = await resolveReportPath(slug);
+        await fs.writeFile(resolved.fullPath, pdfBuffer);
 
         if (params.output_path) {
           await fs.mkdir(path.dirname(params.output_path), { recursive: true });
           await fs.writeFile(params.output_path, pdfBuffer);
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: JSON.stringify({ filename, output_path: params.output_path, size_bytes: pdfBuffer.length }),
-              },
-            ],
-          };
         }
 
         return {
@@ -219,9 +213,13 @@ Returns:
             {
               type: "text" as const,
               text: JSON.stringify({
-                filename,
-                pdf_base64: pdfBuffer.toString("base64"),
+                filename: resolved.filename,
+                batch_path: resolved.fullPath,
+                output_path: params.output_path || undefined,
+                version: resolved.version,
+                slug,
                 size_bytes: pdfBuffer.length,
+                pdf_base64: params.output_path ? undefined : pdfBuffer.toString("base64"),
               }),
             },
           ],

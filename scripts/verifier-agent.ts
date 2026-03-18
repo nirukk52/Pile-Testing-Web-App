@@ -7,6 +7,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { batchDir, verifierFilename } from '../src/lib/report-paths';
 
 const PROMPT = `You are a Pile Test Report Verification Agent.
 
@@ -96,9 +97,10 @@ async function main() {
   const inputPath = process.argv[2];
   const generatedPath = process.argv[3];
   const referencePath = process.argv[4];
+  const slug = process.argv[5];
 
   if (!inputPath || !generatedPath || !referencePath) {
-    console.error('Usage: npx tsx scripts/verifier-agent.ts <input.pdf> <generated.pdf> <reference.pdf>');
+    console.error('Usage: npx tsx scripts/verifier-agent.ts <input.pdf> <generated.pdf> <reference.pdf> [slug]');
     process.exit(1);
   }
 
@@ -157,10 +159,18 @@ async function main() {
     parsed = { raw: text };
   }
 
-  const outDir = '/Users/priyankalalge/.openclaw/workspace-piletest/generated-reports';
+  let outDir: string;
+  let outFilename: string;
+  if (slug) {
+    outDir = batchDir(slug);
+    outFilename = verifierFilename(slug);
+  } else {
+    outDir = '/Users/priyankalalge/.openclaw/workspace-piletest/generated-reports';
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    outFilename = `verifier-output-${stamp}.json`;
+  }
   await fs.mkdir(outDir, { recursive: true });
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const outPath = path.join(outDir, `tp-01-verifier-output-${stamp}.json`);
+  const outPath = path.join(outDir, outFilename);
   await fs.writeFile(outPath, JSON.stringify(parsed, null, 2));
 
   console.log(JSON.stringify({ model: modelName, outputPath: outPath, result: parsed }, null, 2));

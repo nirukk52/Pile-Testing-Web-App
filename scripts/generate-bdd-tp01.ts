@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { IvpltEngine } from '../src/engines/ivplt-engine';
 import { generatePDFWithPageNumbers } from '../src/lib/pdf/generator';
 import { generateIvpltReportHtml } from '../src/lib/pdf/templates/ivplt-template';
+import { resolveReportPath, batchDir, inputFilename, referenceFilename } from '../src/lib/report-paths';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -171,16 +172,21 @@ async function main() {
   const html = generateIvpltReportHtml(reportData);
   const pdfBuffer = await generatePDFWithPageNumbers(html);
 
-  const outDir = '/Users/priyankalalge/.openclaw/workspace-piletest/generated-reports';
-  await fs.mkdir(outDir, { recursive: true });
-  const outPdf = path.join(outDir, 'tp-01-bdd-ivplt-agent-generated-report-v1.pdf');
-  await fs.writeFile(outPdf, pdfBuffer);
+  const slug = 'tp-01-bdd-ivplt';
+  const resolved = await resolveReportPath(slug);
+  await fs.writeFile(resolved.fullPath, pdfBuffer);
 
-  // also copy 3-file contract names
-  await fs.copyFile('/Users/priyankalalge/.openclaw/media/inbound/TP-01_BDD-No-3_IVPLT-input---d66bca06-4b4f-460c-9344-cc0792f74eff.pdf', path.join(outDir, 'tp-01-bdd-ivplt-field-sheet-input.pdf'));
-  await fs.copyFile('/Users/priyankalalge/.openclaw/media/inbound/TP-01_IVPLT_2025-12-09_Report-expected---f1c0f13e-c058-40d3-8f7f-44681cd45c1e.pdf', path.join(outDir, 'tp-01-bdd-ivplt-reference-report.pdf'));
+  const dir = batchDir(slug);
+  await fs.copyFile(
+    '/Users/priyankalalge/.openclaw/media/inbound/TP-01_BDD-No-3_IVPLT-input---d66bca06-4b4f-460c-9344-cc0792f74eff.pdf',
+    path.join(dir, inputFilename(slug))
+  );
+  await fs.copyFile(
+    '/Users/priyankalalge/.openclaw/media/inbound/TP-01_IVPLT_2025-12-09_Report-expected---f1c0f13e-c058-40d3-8f7f-44681cd45c1e.pdf',
+    path.join(dir, referenceFilename(slug))
+  );
 
-  console.log(JSON.stringify({ outPdf, result }, null, 2));
+  console.log(JSON.stringify({ outPdf: resolved.fullPath, version: resolved.version, result }, null, 2));
   await prisma.$disconnect();
 }
 

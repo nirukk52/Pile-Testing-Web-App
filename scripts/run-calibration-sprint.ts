@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { spawn } from 'child_process';
+import { batchDir, inputFilename, referenceFilename } from '../src/lib/report-paths';
 
 interface BenchmarkCase {
   id: string;
@@ -53,17 +54,30 @@ async function main() {
   const benchmark = JSON.parse(await fs.readFile(benchmarkPath, 'utf-8')) as BenchmarkFile;
   const cases = benchmark.cases.filter((c) => c.enabled);
 
-  // slug -> generation script mapping (current known batch)
   const generatorBySlug: Record<string, string> = {
     'tp-01-prestige-nautilus': 'scripts/generate-tp01-v2.ts',
     'tp-01-bdd-no-3': 'scripts/generate-bdd-tp01.ts',
   };
 
-  // slug -> generated output path mapping
-  const generatedBySlug: Record<string, string> = {
-    'tp-01-prestige-nautilus': '/Users/priyankalalge/.openclaw/workspace-piletest/generated-reports/tp-01-ivplt-agent-generated-report-v6.pdf',
-    'tp-01-bdd-no-3': '/Users/priyankalalge/.openclaw/workspace-piletest/generated-reports/tp-01-bdd-ivplt-agent-generated-report-v1.pdf',
+  const reportSlugByBenchmark: Record<string, string> = {
+    'tp-01-prestige-nautilus': 'tp-01-ivplt',
+    'tp-01-bdd-no-3': 'tp-01-bdd-ivplt',
   };
+
+  /** Find the latest versioned report PDF in a batch dir. */
+  async function latestReport(reportSlug: string): Promise<string | null> {
+    const dir = batchDir(reportSlug);
+    try {
+      const files = await fs.readdir(dir);
+      const reports = files
+        .filter((f) => f.includes('-agent-generated-report-v') && f.endsWith('.pdf'))
+        .sort();
+      if (reports.length === 0) return null;
+      return path.join(dir, reports[reports.length - 1]);
+    } catch {
+      return null;
+    }
+  }
 
   const summary: any = {
     benchmark: benchmark.benchmark_name,
@@ -100,12 +114,13 @@ async function main() {
     }
 
     // 2) verify
-    const generatedPath = generatedBySlug[c.slug];
+    const rSlug = reportSlugByBenchmark[c.slug] || c.slug;
+    const generatedPath = await latestReport(rSlug);
     const inputPath = c.files.input;
     const expectedPath = c.files.expected;
 
-    if (!(await exists(generatedPath))) {
-      caseResult.verification.error = `Generated file missing: ${generatedPath}`;
+    if (!generatedPath || !(await exists(generatedPath))) {
+      caseResult.verification.error = `Generated file missing for slug ${rSlug}`;
       summary.cases.push(caseResult);
       continue;
     }
@@ -113,7 +128,7 @@ async function main() {
     caseResult.verification.attempted = true;
     const verify = await runCmd(
       'npx',
-      ['tsx', 'scripts/verifier-agent.ts', inputPath, generatedPath, expectedPath],
+      ['tsx', 'scripts/verifier-agent.ts', inputPath, generatedPath, expectedPath, rSlug],
       repoRoot,
       {
         VERIFIER_MODEL: process.env.VERIFIER_MODEL || 'gemini-2.5-pro',
@@ -145,10 +160,9 @@ async function main() {
       caseResult.criticalFailures = (parsed.result.critical_failures || []).length;
       caseResult.verifierOutputPath = parsed.outputPath;
 
-      // copy 3-file contract + verifier json into run folder
-      const targetInput = path.join(caseDir, `${c.slug}-field-sheet-input.pdf`);
-      const targetGen = path.join(caseDir, `${c.slug}-agent-generated-report.pdf`);
-      const targetRef = path.join(caseDir, `${c.slug}-reference-report.pdf`);
+      const targetInput = path.join(caseDir, inputFilename(c.slug));
+      const targetGen = path.join(caseDir, path.basename(generatedPath));
+      const targetRef = path.join(caseDir, referenceFilename(c.slug));
       await fs.copyFile(inputPath, targetInput);
       await fs.copyFile(generatedPath, targetGen);
       await fs.copyFile(expectedPath, targetRef);

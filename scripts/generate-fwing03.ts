@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { IvpltEngine } from '../src/engines/ivplt-engine';
 import { generatePDFWithPageNumbers } from '../src/lib/pdf/generator';
 import { generateIvpltReportHtml } from '../src/lib/pdf/templates/ivplt-template';
+import { resolveReportPath } from '../src/lib/report-paths';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -141,12 +142,12 @@ async function main() {
 
   const html = generateIvpltReportHtml(reportData as any);
   const pdfBuffer = await generatePDFWithPageNumbers(html);
-  const outDir = '/Users/priyankalalge/.openclaw/workspace-piletest/generated-reports';
-  await fs.mkdir(outDir, { recursive: true });
-  const outPdf = path.join(outDir, 'f-wing-03-ivplt-agent-generated-report-v1.pdf');
-  await fs.writeFile(outPdf, pdfBuffer);
 
-  console.log(JSON.stringify({ outPdf, result }, null, 2));
+  const slug = 'f-wing-03-ivplt';
+  const resolved = await resolveReportPath(slug);
+  await fs.writeFile(resolved.fullPath, pdfBuffer);
+
+  console.log(JSON.stringify({ outPdf: resolved.fullPath, version: resolved.version, result }, null, 2));
   await prisma.$disconnect();
 }
 
