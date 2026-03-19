@@ -318,9 +318,15 @@ async function main() {
     await fs.copyFile(expected, path.join(batchDir, `${slug}-reference-report.pdf`));
   }
 
-  // 5) verify gate
+  // 5) verify gate (always in prod)
   let verifier: any = null;
-  const shouldVerify = !noVerify && (verifyFlag || !!expected);
+  const mode = (args['mode'] as string) || 'prod';
+  const shouldVerify = !noVerify && (mode === 'prod' || verifyFlag || !!expected);
+
+  if (shouldVerify && !expected) {
+    throw new Error('Verification is required but --expected was not provided. Pass --expected <reference.pdf> or use --mode dev --no-verify for development only.');
+  }
+
   if (shouldVerify && expected) {
     const vr = await runVerifier(inputAlias, generatedPath, expected);
     let parsed: any = null;
@@ -341,7 +347,6 @@ async function main() {
 
     const score = parsed?.result?.overall_score_percent;
     const pass90 = parsed?.result?.pass_threshold_90;
-    const mode = (args['mode'] as string) || 'prod';
     if (mode === 'prod' && pass90 === false) {
       throw new Error(`Publish blocked: verifier score=${score}, pass90=false`);
     }
