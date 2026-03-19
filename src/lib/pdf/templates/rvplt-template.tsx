@@ -6,6 +6,7 @@
 
 import type { CalculationResult, ReadingInput } from '@/engines';
 import { generateChartScript } from '../chart-generator';
+import { getThemeCoreCss } from './theme-core';
 
 /**
  * Site image data for the report.
@@ -334,7 +335,8 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
     siteImages = [],
     fieldReadings = [],
     calibrationCertificates = [],
-  } = data;
+    _theme = 'moderna-clean',
+  } = data as RvpltReportData & { _theme?: 'moderna-clean' | 'moderna-pro' };
 
   const formatDate = (dateStr: string) => {
     try {
@@ -383,6 +385,7 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RVPLT Report - ${pileId}</title>
   <style>
+    ${getThemeCoreCss(_theme)}
     * {
       margin: 0;
       padding: 0;
@@ -877,8 +880,8 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
       <p><strong>Client:</strong> ${client}</p>
       <p><strong>Contractor:</strong> ${contractor}</p>
       ${pmc ? `<p><strong>PMC:</strong> ${pmc}</p>` : ''}
-      <p><strong>Test Date:</strong> ${formatDate(testDate)}</p>
-      ${reportNo ? `<p><strong>Report No:</strong> ${reportNo}</p>` : ''}
+      <p><strong>Test Date:</strong><span class="micro-chip">${formatDate(testDate)}</span></p>
+      ${reportNo ? `<p><strong>Report No:</strong><span class="micro-chip">${reportNo}</span></p>` : ''}
     </div>
     
     <div class="cover-badge">
@@ -888,7 +891,7 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
 
   <div class="page toc-page">
     <div class="page-header">
-      <span>${formatDate(testDate)}</span>
+      <span class="micro-date">${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -916,7 +919,7 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
 
   <div class="page content-page">
     <div class="page-header">
-      <span>${formatDate(testDate)}</span>
+      <span class="micro-date">${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -943,7 +946,7 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
 
   <div class="page content-page">
     <div class="page-header">
-      <span>${formatDate(testDate)}</span>
+      <span class="micro-date">${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -976,7 +979,7 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
 
   <div class="page content-page">
     <div class="page-header">
-      <span>${formatDate(testDate)}</span>
+      <span class="micro-date">${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1014,7 +1017,7 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
 
   <div class="page content-page">
     <div class="page-header">
-      <span>${formatDate(testDate)}</span>
+      <span class="micro-date">${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1056,7 +1059,7 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
 
   <div class="page content-page">
     <div class="page-header">
-      <span>${formatDate(testDate)}</span>
+      <span class="micro-date">${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1083,7 +1086,7 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
 
   <div class="page chart-page">
     <div class="page-header">
-      <span>${formatDate(testDate)}</span>
+      <span class="micro-date">${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1134,7 +1137,7 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
 
   <div class="page content-page">
     <div class="page-header">
-      <span>${formatDate(testDate)}</span>
+      <span class="micro-date">${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1221,7 +1224,7 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
 
   <div class="page content-page">
     <div class="page-header">
-      <span>${formatDate(testDate)}</span>
+      <span class="micro-date">${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1254,7 +1257,7 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
 
   <div class="page content-page">
     <div class="page-header">
-      <span>${formatDate(testDate)}</span>
+      <span class="micro-date">${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1269,7 +1272,7 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
   ${siteImages.length > 0 ? `
   <div class="page" style="padding: 0; margin: 0; height: 100vh; box-sizing: border-box; overflow: hidden;">
     <div style="position: absolute; top: 15px; left: 40px; right: 40px; display: flex; justify-content: space-between; font-size: 9pt; color: #64748b; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; z-index: 10;">
-      <span>${formatDate(testDate)}</span>
+      <span class="micro-date">${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1308,7 +1311,7 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
   ${fieldReadings.length > 0 ? `
   <div class="page content-page">
     <div class="page-header">
-      <span>${formatDate(testDate)}</span>
+      <span class="micro-date">${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1327,7 +1330,7 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
   ${calibrationCertificates.length > 0 ? `
   <div class="page content-page">
     <div class="page-header">
-      <span>${formatDate(testDate)}</span>
+      <span class="micro-date">${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1345,7 +1348,7 @@ export function generateRvpltReportHtml(data: RvpltReportData): string {
 
   <div class="page content-page">
     <div class="page-header">
-      <span>${formatDate(testDate)}</span>
+      <span class="micro-date">${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
