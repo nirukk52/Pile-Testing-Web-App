@@ -284,7 +284,7 @@ function generateObservationSheetHtml(readings: ReadingInput[]): string {
     prevLoad = reading.loadT;
 
     html += `
-      <tr style="border-bottom: 1px solid #e2e8f0;">
+      <tr style="border-bottom: 1px dashed #e2e8f0;">
         <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center; font-weight: ${showDate ? '600' : '400'};">${showDate ? dateStr : ''}</td>
         <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center;">${timeStr}</td>
         <td style="border: 1px solid #e2e8f0; padding: 6px; text-align: center; font-weight: 600;">${reading.pressureGauge || '-'}</td>
@@ -409,7 +409,7 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
       content: '';
       position: absolute;
       inset: 12px;
-      border: 1.5px solid #93c5fd;
+      border: 1px solid #dbeafe;
       border-radius: 12px;
       pointer-events: none;
     }
@@ -427,7 +427,7 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
       justify-content: space-between;
       font-size: 9pt;
       color: #64748b;
-      border-bottom: 1px solid #e2e8f0;
+      border-bottom: 1px dashed #e2e8f0;
       padding-bottom: 8px;
     }
 
@@ -934,7 +934,7 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
 
   <div class="page toc-page">
     <div class="page-header">
-      <span class="micro-date">${formatDate(testDate)}</span>
+      <span>${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -962,7 +962,7 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
 
   <div class="page content-page">
     <div class="page-header">
-      <span class="micro-date">${formatDate(testDate)}</span>
+      <span>${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -989,7 +989,7 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
 
   <div class="page content-page">
     <div class="page-header">
-      <span class="micro-date">${formatDate(testDate)}</span>
+      <span>${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1022,7 +1022,7 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
 
   <div class="page content-page">
     <div class="page-header">
-      <span class="micro-date">${formatDate(testDate)}</span>
+      <span>${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1060,7 +1060,7 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
 
   <div class="page content-page">
     <div class="page-header">
-      <span class="micro-date">${formatDate(testDate)}</span>
+      <span>${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1102,7 +1102,7 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
 
   <div class="page content-page">
     <div class="page-header">
-      <span class="micro-date">${formatDate(testDate)}</span>
+      <span>${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1129,7 +1129,7 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
 
   <div class="page chart-page">
     <div class="page-header">
-      <span class="micro-date">${formatDate(testDate)}</span>
+      <span>${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1180,7 +1180,7 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
 
   <div class="page content-page">
     <div class="page-header">
-      <span class="micro-date">${formatDate(testDate)}</span>
+      <span>${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1267,7 +1267,7 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
 
   <div class="page content-page">
     <div class="page-header">
-      <span class="micro-date">${formatDate(testDate)}</span>
+      <span>${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1300,7 +1300,7 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
 
   <div class="page content-page">
     <div class="page-header">
-      <span class="micro-date">${formatDate(testDate)}</span>
+      <span>${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1314,8 +1314,8 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
 
   ${siteImages.length > 0 ? `
   <div class="page" style="padding: 0; margin: 0; height: 100vh; box-sizing: border-box; overflow: hidden;">
-    <div style="position: absolute; top: 15px; left: 40px; right: 40px; display: flex; justify-content: space-between; font-size: 9pt; color: #64748b; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; z-index: 10;">
-      <span class="micro-date">${formatDate(testDate)}</span>
+    <div style="position: absolute; top: 15px; left: 40px; right: 40px; display: flex; justify-content: space-between; font-size: 9pt; color: #64748b; border-bottom: 1px dashed #e2e8f0; padding-bottom: 8px; z-index: 10;">
+      <span>${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1354,7 +1354,7 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
   ${fieldReadings.length > 0 ? `
   <div class="page content-page">
     <div class="page-header">
-      <span class="micro-date">${formatDate(testDate)}</span>
+      <span>${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1373,7 +1373,7 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
   ${calibrationCertificates.length > 0 ? `
   <div class="page content-page">
     <div class="page-header">
-      <span class="micro-date">${formatDate(testDate)}</span>
+      <span>${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
@@ -1391,7 +1391,7 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
 
   <div class="page content-page">
     <div class="page-header">
-      <span class="micro-date">${formatDate(testDate)}</span>
+      <span>${formatDate(testDate)}</span>
       <span>RVPLT Report - ${pileId}</span>
     </div>
     
