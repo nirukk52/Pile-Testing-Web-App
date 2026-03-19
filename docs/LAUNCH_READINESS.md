@@ -22,6 +22,7 @@ Status legend:
 | Verifier gate (3-file contract) | ✅ | Agent | `scripts/verifier-agent.ts`, `scripts/run-verifier-default.sh` | Verifier JSON produced per run; publish policy applied |
 | Calibration benchmark registry | ✅ | Agent | `benchmarks/ivplt-batch.json` | Cases are versioned and runnable |
 | End-to-end calibration runner | ✅ | Agent | `scripts/run-calibration-sprint.ts` | Produces run folder + summary with avg score |
+| Unified production runner (all test types) | ✅ | Agent | `scripts/run-report.ts` | Single command executes extract->calculate->render->verify flow |
 | Diff analytics (where/why mismatch) | ✅ | Agent | `scripts/generate-calibration-diff-report.ts` | Produces `diff-report.json/md` |
 
 **P0 launch gate target:**

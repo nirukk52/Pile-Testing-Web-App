@@ -1,8 +1,13 @@
 # Pipeline Parity Spec (IVPLT)
 
-This document defines the canonical rules for turning field-sheet input into an IVPLT report.
+This document defines the canonical rules for turning field-sheet input into a report.
 
 See also: `docs/BOUNDARIES.md` for repo/workspace ownership and skill source-of-truth rules.
+
+## Execution Path (current canonical)
+- Primary production entrypoint: `scripts/run-report.ts`
+- This runner handles ingest -> normalize -> metadata gate -> calculate -> render -> verify -> publish gating
+- Older one-off scripts are legacy/debug helpers and not production source of truth
 
 ## 1) Date Handling (India-first)
 - Parse all sheet dates as `DD/MM/YYYY` (or `DD/MM/YY` -> year 2026 when 2-digit source year is used in this project set).
