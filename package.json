@@ -7,7 +7,11 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "report:run": "npx tsx scripts/run-report.ts",
+    "report:dev": "npx tsx scripts/run-report.ts --mode dev --no-verify",
+    "calibration:sprint": "npx tsx scripts/run-calibration-sprint.ts",
+    "calibration:diff": "npx tsx scripts/generate-calibration-diff-report.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
