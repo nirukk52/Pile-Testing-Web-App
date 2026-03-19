@@ -390,11 +390,11 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
     }
     
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       font-size: 11pt;
       line-height: 1.6;
-      color: #1e293b;
-      background: white;
+      color: #0f172a;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
     }
     
     .page {
@@ -467,12 +467,13 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
     }
     
     .cover-title h1 {
-      font-size: 22pt;
-      color: #1e40af;
+      font-size: 24pt;
+      color: #0b3aa8;
       text-transform: uppercase;
-      letter-spacing: 1px;
+      letter-spacing: 1.2px;
       line-height: 1.2;
       margin-bottom: 8px;
+      text-shadow: 0 1px 0 rgba(255,255,255,0.5);
     }
     
     .cover-title h2 {
@@ -482,17 +483,18 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
     }
     
     .cover-image {
-      width: 85%;
-      max-width: 500px;
+      width: 88%;
+      max-width: 560px;
       height: 320px;
-      margin: 15px auto;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
+      margin: 18px auto;
+      border: 2px solid #93c5fd;
+      border-radius: 14px;
       overflow: hidden;
-      background: #f8fafc;
+      background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
       display: flex;
       align-items: center;
       justify-content: center;
+      box-shadow: 0 8px 24px rgba(30,64,175,0.12);
     }
     
     .cover-image img {
@@ -600,10 +602,14 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
     
     .section-title {
       font-size: 14pt;
-      color: #1e40af;
-      border-bottom: 2px solid #1e40af;
-      padding-bottom: 8px;
+      color: #0b3aa8;
+      padding: 8px 12px;
       margin-bottom: 15px;
+      border: 1px solid #bfdbfe;
+      border-left: 6px solid #2563eb;
+      border-radius: 8px;
+      background: linear-gradient(90deg, #eff6ff 0%, #ffffff 100%);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.8);
     }
     
     .section h3 {
@@ -628,21 +634,29 @@ export function generateRvpltModernaProReportHtml(data: RvpltReportData): string
     
     table {
       width: 100%;
-      border-collapse: collapse;
+      border-collapse: separate;
+      border-spacing: 0;
       margin: 15px 0;
       font-size: 10pt;
+      border: 1px solid #bfdbfe;
+      border-radius: 10px;
+      overflow: hidden;
     }
     
     th, td {
-      border: 1px solid #cbd5e1;
+      border-bottom: 1px solid #dbeafe;
+      border-right: 1px solid #dbeafe;
       padding: 10px 12px;
       text-align: left;
     }
+
+    th:last-child, td:last-child { border-right: none; }
+    tr:last-child td { border-bottom: none; }
     
     th {
-      background: #f1f5f9;
-      font-weight: 600;
-      color: #334155;
+      background: linear-gradient(180deg, #1e40af 0%, #1d4ed8 100%);
+      color: #ffffff;
+      font-weight: 700;
     }
     
     .specs-table td:first-child {

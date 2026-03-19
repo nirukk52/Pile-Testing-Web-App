@@ -162,11 +162,16 @@ async function main() {
   const location = pi.location || 'NA';
   const client = pi.client || 'NA';
   const pileId = pi.pileId || reportNo;
-  const pileDiameterMm = Number(pi.pileDiameter || 0);
-  const designLoadT = Number(pi.designLoad || 0);
-  const testLoadT = Number(pi.testLoad || 0);
-  const ramAreaCm2 = Number(pi.ramArea || 0);
-  const gaugeLeastCountMm = Number(pi.lcDialGauge || 0.01);
+  const toNum = (v: any, fallback = 0) => {
+    const n = typeof v === 'number' ? v : Number(String(v ?? '').replace(/[^0-9.+-]/g, ''));
+    return Number.isFinite(n) ? n : fallback;
+  };
+
+  const pileDiameterMm = toNum(pi.pileDiameter, 0);
+  const designLoadT = toNum(pi.designLoad, 0);
+  const testLoadT = toNum(pi.testLoad, 0);
+  const ramAreaCm2 = toNum(pi.ramArea, 0);
+  const gaugeLeastCountMm = toNum(pi.lcDialGauge, 0.01);
 
   let project = await prisma.project.findFirst({ where: { name: projectName } });
   if (!project) {
@@ -276,7 +281,8 @@ async function main() {
     location,
     pileId,
     reportNo,
-    testDate: parseDdMmYyyy(officialDate).toISOString(),
+    // Display date should remain exactly the official user-confirmed date (DD/MM/YYYY)
+    testDate: officialDate,
     pileDiameterMm,
     pileDepthM: depth,
     concreteGrade: grade,
