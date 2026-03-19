@@ -8,7 +8,6 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import fs from "fs/promises";
 import path from "path";
-import { toSlug, resolveReportPath } from "@/lib/report-paths";
 
 const GenerateReportInputSchema = z.object({
   test_id: z.string().uuid().describe("UUID of the test to generate a report for"),
@@ -58,6 +57,7 @@ Returns:
         const prisma = (await import("@/lib/prisma")).default;
         const { getTestEngine } = await import("@/engines");
         const { generatePDFWithPageNumbers } = await import("@/lib/pdf/generator");
+        const { toSlug, resolveReportPath } = await import("@/lib/report-paths");
         const { generateIvpltReportHtml } = await import("@/lib/pdf/templates/ivplt-template");
         const { generateRvpltReportHtml } = await import("@/lib/pdf/templates/rvplt-template");
         const { generateLateralReportHtml } = await import("@/lib/pdf/templates/lateral-template");
