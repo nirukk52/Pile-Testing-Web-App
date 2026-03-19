@@ -9,6 +9,7 @@ import type { TestType } from '../src/engines/types';
 import { generatePDFWithPageNumbers } from '../src/lib/pdf/generator';
 import { generateIvpltReportHtml } from '../src/lib/pdf/templates/ivplt-template';
 import { generateRvpltReportHtml } from '../src/lib/pdf/templates/rvplt-template';
+import { generateRvpltModernaProReportHtml } from '../src/lib/pdf/templates/rvplt-template-moderna-pro';
 import { generateLateralReportHtml } from '../src/lib/pdf/templates/lateral-template';
 import { generateUpliftReportHtml } from '../src/lib/pdf/templates/uplift-template';
 
@@ -53,12 +54,14 @@ function parseDdMmYyyy(s: string): Date {
   return new Date(`${yy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}T00:00:00+05:30`);
 }
 
-function renderHtmlByType(type: TestType, data: any): string {
+function renderHtmlByType(type: TestType, data: any, theme?: string): string {
   switch (type) {
     case 'IVPLT':
       return generateIvpltReportHtml(data);
     case 'RVPLT':
-      return generateRvpltReportHtml(data);
+      return theme === 'moderna-pro'
+        ? generateRvpltModernaProReportHtml(data)
+        : generateRvpltReportHtml(data);
     case 'LATERAL':
       return generateLateralReportHtml(data);
     case 'UPLIFT':
@@ -304,7 +307,7 @@ async function main() {
     _appendPage: appendPage,
   };
 
-  const html = renderHtmlByType(testType, reportData);
+  const html = renderHtmlByType(testType, reportData, theme);
   const pdfBuffer = await generatePDFWithPageNumbers(html);
 
   const generatedName = `${slug}-agent-generated-report-v${version}.pdf`;
