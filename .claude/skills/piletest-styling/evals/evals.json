@@ -1,0 +1,23 @@
+{
+  "skill_name": "piletest-styling",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Apply moderna-pro styling to RVPLT while preserving all calculations and table values.",
+      "expected_output": "Visual improvements present; verifier score non-regressive; no critical failures.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Add page border and micro date/report styling without changing any engineering content.",
+      "expected_output": "Only presentation differs; numerical and compliance content unchanged.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Propagate shared theme core to IVPLT and RVPLT templates.",
+      "expected_output": "Consistent theme tokens across report types with no data regressions.",
+      "files": []
+    }
+  ]
+}
