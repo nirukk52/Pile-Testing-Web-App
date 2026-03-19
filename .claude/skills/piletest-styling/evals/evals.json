@@ -18,6 +18,12 @@
       "prompt": "Propagate shared theme core to IVPLT and RVPLT templates.",
       "expected_output": "Consistent theme tokens across report types with no data regressions.",
       "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Lock moderna-pro variant and verify readability: no white-on-white table headers, no duplicated header strips, and exact official cover date rendering.",
+      "expected_output": "moderna-pro remains stable and readable; date and header regressions are blocked.",
+      "files": []
     }
   ]
 }

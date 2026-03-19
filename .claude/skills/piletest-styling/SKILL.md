@@ -22,6 +22,26 @@ Improve visual quality of generated reports **without changing engineering truth
 - `moderna-clean` = baseline stable theme (default)
 - `moderna-pro` = enhanced visual theme (borders, micro details, vibrant accents)
 
+## Locked Variation: `moderna-pro` (v1 locked)
+Treat current `moderna-pro` as a locked reference variant.
+
+Must keep:
+- subtle page frame (not overpowering)
+- clean top header (no browser/date strip artifacts)
+- high-contrast table headers (no white-on-white text)
+- micro-detail styling only where readable and non-redundant
+- exact official cover date display (no timezone shift)
+
+Do not change without explicit user approval:
+- header hierarchy
+- border intensity/layout
+- table header contrast rules
+- date/report chip placement rules
+
+If iterating beyond lock:
+- create a new variant label (e.g., `moderna-pro-v2`),
+- do not mutate locked `moderna-pro` behavior silently.
+
 ## Implementation Pattern
 1. Keep a shared style core (`theme-core`) reusable across test types.
 2. Apply same theme tokens across IVPLT/RVPLT/LATERAL/UPLIFT.
